@@ -1,5 +1,8 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
+/**
+ * Creates a Supabase client configured for the server (no session persistence)
+ */
 export const createSupabaseServerClient = () => {
   return createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -12,8 +15,8 @@ export const createSupabaseServerClient = () => {
   )
 }
 
-// ✅ Shortcut export for simple usage
+// ✅ Default Supabase client (optional shortcut)
 export const supabase = createSupabaseServerClient()
 
-// ✅ Add this alias so routes that call createClient() don’t break
+// ✅ Alias export to match how your API routes import it
 export const createClient = createSupabaseServerClient
