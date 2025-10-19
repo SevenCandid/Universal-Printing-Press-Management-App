@@ -1,0 +1,147 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Light mode theme */
+  --color-scheme: light dark;
+  --background: 0 0% 100%;
+  --foreground: 222.2 84% 4.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 84% 4.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222.2 84% 4.9%;
+  --primary: 221.2 83.2% 53.3%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 210 40% 96.1%;
+  --secondary-foreground: 222.2 47.4% 11.2%;
+  --muted: 210 40% 96.1%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --accent: 210 40% 96.1%;
+  --accent-foreground: 222.2 47.4% 11.2%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
+  --ring: 221.2 83.2% 53.3%;
+  --radius: 0.5rem;
+
+  /* Universal Printing Press brand */
+  --brand-primary: #1A237E;    /* Deep blue */
+  --brand-accent: #FFB300;     /* Gold */
+  --brand-background: #F5F6FA; /* Light grey */
+  --brand-text: #212121;       /* Dark text */
+}
+
+.dark {
+  /* Dark mode theme */
+  --background: 233 20% 15%;
+  --foreground: 210 40% 98%;
+  --card: 233 20% 20%;
+  --card-foreground: 210 40% 98%;
+  --popover: 233 20% 18%;
+  --popover-foreground: 210 40% 98%;
+  --primary: 231 40% 60%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 231 25% 25%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 231 25% 25%;
+  --muted-foreground: 215 15% 70%;
+  --accent: 231 25% 30%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 231 25% 25%;
+  --input: 231 25% 25%;
+  --ring: 231 40% 60%;
+
+  /* Brand overrides */
+  --brand-primary: #0D174D;    /* Deep navy */
+  --brand-accent: #FFC107;     /* Brighter gold */
+  --brand-background: #121212; /* Dark background */
+  --brand-text: #E0E0E0;       /* Light text */
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground transition-colors duration-300;
+    background-color: var(--brand-background);
+    color: var(--brand-text);
+    font-family: 'Inter', sans-serif;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply px-4 py-2 rounded-lg font-medium transition-colors;
+    background-color: var(--brand-primary);
+    color: white;
+  }
+  .btn-primary:hover {
+    background-color: #0D174D;
+  }
+}
+
+
+@layer utilities {
+  @variants responsive {
+    .xs\:hidden {
+      @apply hidden;
+    }
+    @media (max-width: 360px) {
+      .xs\:flex {
+        display: flex;
+      }
+      .xs\:hidden {
+        display: none;
+      }
+    }
+  }
+}
+
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slideDown {
+  animation: slideDown 0.15s ease-out forwards;
+}
+
+
+/* Compact scrollbars inside dropdowns */
+.scrollbar-thin {
+  scrollbar-width: thin;
+}
+.scrollbar-thumb-muted::-webkit-scrollbar-thumb {
+  background-color: rgba(150, 150, 150, 0.4);
+  border-radius: 8px;
+}
+.scrollbar-track-transparent::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Custom xs breakpoint for phones ≤320px */
+@media (max-width: 360px) {
+  .xs\:hidden {
+    display: none !important;
+  }
+  .xs\:flex {
+    display: flex !important;
+  }
+
+  select {
+    font-size: 0.7rem;
+    padding: 0.25rem 0.5rem;
+  }
+}
