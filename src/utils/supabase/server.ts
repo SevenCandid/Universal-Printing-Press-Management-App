@@ -1,7 +1,7 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
 export const createSupabaseServerClient = () => {
-  return createClient(
+  return createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -14,3 +14,6 @@ export const createSupabaseServerClient = () => {
 
 // ✅ Shortcut export for simple usage
 export const supabase = createSupabaseServerClient()
+
+// ✅ Add this alias so routes that call createClient() don’t break
+export const createClient = createSupabaseServerClient
