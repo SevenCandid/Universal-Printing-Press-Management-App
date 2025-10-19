@@ -50,7 +50,8 @@ export default function LoginPage() {
                 name: session.user.user_metadata?.full_name || null,
               },
             ])
-            .select('role, name')
+            .select('role, name, email')
+
             .maybeSingle()
 
           if (insertError) {
@@ -130,7 +131,8 @@ export default function LoginPage() {
               name: user.user_metadata?.full_name || null,
             },
           ])
-          .select('role, name')
+          .select('role, name, email')
+
           .maybeSingle()
 
         if (insertError) {
