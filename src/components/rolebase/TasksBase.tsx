@@ -180,150 +180,147 @@ export default function TasksPage() {
     toast.success('Task updated successfully')
   }
 
-  const myTasks =
-    role === 'manager' && user
-      ? tasks.filter((t) => t.assigned_to === user.id)
-      : []
+  // ✅ Split tasks for manager (NEW SECTION ADDED BELOW)
+  // ✅ Improved logic for managers
+const myTasks =
+role === 'manager' && user
+  ? tasks.filter((t) => t.assigned_to === user.id)
+  : []
 
-  const otherTasks =
-    role === 'manager' && user
-      ? tasks.filter(
-          (t) =>
-            (t.assigned_by === user.id || t.assigned_by === user.email || t.assigned_by === user.name) &&
-            t.assigned_to !== user.id
-        )
-      : []
+const otherTasks =
+role === 'manager' && user
+  ? tasks.filter(
+      (t) =>
+        (t.assigned_by === user.id || t.assigned_by === user.email || t.assigned_by === user.name) &&
+        t.assigned_to !== user.id
+    )
+  : []
+
+
 
   if (!supabase) return null
 
   const renderTaskTable = (taskList: any[]) => (
-    <div className="w-full overflow-x-auto rounded-lg border bg-card shadow-sm">
-      <table className="min-w-full divide-y divide-border text-sm">
-        <thead className="bg-muted/50">
+    <table className="min-w-full divide-y divide-border">
+      <thead className="bg-muted/50">
+        <tr>
+          {['Title', 'Assigned', 'Order', 'Priority', 'Status', 'Due', 'Created', 'Actions'].map((h) => (
+            <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
+              {h}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-border">
+        {loading ? (
           <tr>
-            {['Title', 'Assigned', 'Order', 'Priority', 'Status', 'Due', 'Created', 'Actions'].map((h) => (
-              <th key={h} className="px-3 md:px-4 py-3 text-left text-[10px] md:text-xs font-medium uppercase text-muted-foreground whitespace-nowrap">
-                {h}
-              </th>
-            ))}
+            <td colSpan={8} className="text-center py-8 text-muted-foreground">Loading tasks...</td>
           </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {loading ? (
-            <tr>
-              <td colSpan={8} className="text-center py-6 text-muted-foreground text-sm">Loading tasks...</td>
-            </tr>
-          ) : taskList.length === 0 ? (
-            <tr>
-              <td colSpan={8} className="text-center py-6 text-muted-foreground text-sm">No tasks found</td>
-            </tr>
-          ) : (
-            taskList.map((t) => (
-              <tr key={t.id} className="hover:bg-muted/30 text-xs md:text-sm">
-                <td className="px-3 md:px-4 py-3 font-medium flex flex-col">
-                  {t.title}
-                  {role === 'manager' && (
-                    <span className="text-[10px] text-muted-foreground mt-1">
-                      Assigned by: {t.assigned_by === user?.id ? 'You' : t.profiles?.name || 'Unknown'}
-                    </span>
-                  )}
-                </td>
-                <td className="px-3 md:px-4 py-3 flex items-center gap-2">
-                  <UserIcon className="h-4 w-4 text-primary shrink-0" />
-                  <span className="truncate max-w-[90px] sm:max-w-[120px]">{t.profiles?.name || 'Unassigned'}</span>
-                </td>
-                <td className="px-3 md:px-4 py-3">{t.orders?.customer_name || '—'}</td>
-                <td className="px-3 md:px-4 py-3">
+        ) : taskList.length === 0 ? (
+          <tr>
+            <td colSpan={8} className="text-center py-8 text-muted-foreground">No tasks found</td>
+          </tr>
+        ) : (
+          taskList.map((t) => (
+            <tr key={t.id} className="hover:bg-muted/30">
+              <td className="px-4 py-3 font-medium flex flex-col">
+                {t.title}
+                {role === 'manager' && (
+                  <span className="text-xs text-muted-foreground mt-1">
+                    Assigned by: {t.assigned_by === user?.id ? 'You' : t.profiles?.name || 'Unknown'}
+                  </span>
+                )}
+              </td>
+              <td className="px-4 py-3 text-sm flex items-center gap-2">
+                <UserIcon className="h-4 w-4 text-primary" />
+                {t.profiles?.name || 'Unassigned'}
+              </td>
+              <td className="px-4 py-3 text-sm">{t.orders?.customer_name || '—'}</td>
+              <td className="px-4 py-3">
+                <span
+                  className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    t.priority === 'high'
+                      ? 'bg-red-100 text-red-800'
+                      : t.priority === 'medium'
+                      ? 'bg-yellow-100 text-yellow-800'
+                      : 'bg-green-100 text-green-800'
+                  }`}
+                >
+                  {t.priority}
+                </span>
+              </td>
+              <td className="px-4 py-3">
+                {role === 'staff' && t.assigned_to === user?.id ? (
+                  <select
+                    value={t.status}
+                    onChange={(e) => handleStatusChange(t.id, e.target.value, t.order_id)}
+                    className="border rounded-md px-2 py-1 text-xs"
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                  </select>
+                ) : (
                   <span
-                    className={`px-2 py-1 rounded-full text-[10px] md:text-xs font-medium ${
-                      t.priority === 'high'
-                        ? 'bg-red-100 text-red-800'
-                        : t.priority === 'medium'
-                        ? 'bg-yellow-100 text-yellow-800'
-                        : 'bg-green-100 text-green-800'
+                    className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      t.status === 'completed'
+                        ? 'bg-green-100 text-green-800'
+                        : t.status === 'in_progress'
+                        ? 'bg-blue-100 text-blue-800'
+                        : 'bg-gray-100 text-gray-800'
                     }`}
                   >
-                    {t.priority}
+                    {t.status.replace('_', ' ')}
                   </span>
-                </td>
-                <td className="px-3 md:px-4 py-3">
-                  {role === 'staff' && t.assigned_to === user?.id ? (
-                    <select
-                      value={t.status}
-                      onChange={(e) => handleStatusChange(t.id, e.target.value, t.order_id)}
-                      className="border rounded-md px-2 py-1 text-[10px] md:text-xs"
-                    >
-                      <option value="pending">Pending</option>
-                      <option value="in_progress">In Progress</option>
-                      <option value="completed">Completed</option>
-                    </select>
-                  ) : (
-                    <span
-                      className={`px-2 py-1 rounded-full text-[10px] md:text-xs font-medium ${
-                        t.status === 'completed'
-                          ? 'bg-green-100 text-green-800'
-                          : t.status === 'in_progress'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-gray-100 text-gray-800'
-                      }`}
-                    >
-                      {t.status.replace('_', ' ')}
-                    </span>
-                  )}
-                </td>
-                <td className="px-3 md:px-4 py-3 text-xs md:text-sm whitespace-nowrap">
-                  {t.due_date ? new Date(t.due_date).toLocaleDateString() : '—'}
-                </td>
-                <td className="px-3 md:px-4 py-3 text-xs md:text-sm whitespace-nowrap">
-                  {new Date(t.created_at).toLocaleDateString()}
-                </td>
-                <td className="px-3 md:px-4 py-3 flex gap-2">
-                  {(role === 'admin' || role === 'manager' || t.assigned_to === user?.id) && (
-                    <button onClick={() => openEdit(t)} title="Edit" className="text-blue-600 hover:text-blue-800">
-                      <PencilSquareIcon className="h-4 w-4" />
-                    </button>
-                  )}
-                  {(role === 'ceo' || role === 'manager') && (
-                    <button
-                      onClick={() => {
-                        const newAssignee = prompt('Enter new staff ID to reassign:')
-                        if (newAssignee) reassignTask(t.id, newAssignee)
-                      }}
-                      title="Reassign Task"
-                      className="text-yellow-600 hover:text-yellow-800"
-                    >
-                      <ArrowPathIcon className="h-4 w-4" />
-                    </button>
-                  )}
-                  {(role === 'admin' || role === 'manager' || role === 'ceo') && (
-                    <button onClick={() => handleDeleted(t.id)} title="Delete" className="text-red-600 hover:text-red-800">
-                      <TrashIcon className="h-4 w-4" />
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
+                )}
+              </td>
+              <td className="px-4 py-3 text-sm">{t.due_date ? new Date(t.due_date).toLocaleDateString() : '—'}</td>
+              <td className="px-4 py-3 text-sm">{new Date(t.created_at).toLocaleDateString()}</td>
+              <td className="px-4 py-3 flex gap-2">
+                {(role === 'admin' || role === 'manager' || t.assigned_to === user?.id) && (
+                  <button onClick={() => openEdit(t)} title="Edit" className="text-blue-600 hover:text-blue-800">
+                    <PencilSquareIcon className="h-5 w-5" />
+                  </button>
+                )}
+                {(role === 'ceo' || role === 'manager') && (
+                  <button
+                    onClick={() => {
+                      const newAssignee = prompt('Enter new staff ID to reassign:')
+                      if (newAssignee) reassignTask(t.id, newAssignee)
+                    }}
+                    title="Reassign Task"
+                    className="text-yellow-600 hover:text-yellow-800"
+                  >
+                    <ArrowPathIcon className="h-5 w-5" />
+                  </button>
+                )}
+                {(role === 'admin' || role === 'manager' || role === 'ceo') && (
+                  <button onClick={() => handleDeleted(t.id)} title="Delete" className="text-red-600 hover:text-red-800">
+                    <TrashIcon className="h-5 w-5" />
+                  </button>
+                )}
+              </td>
+            </tr>
+          ))
+        )}
+      </tbody>
+    </table>
   )
 
   return (
-    <div className="space-y-6 pb-10">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="space-y-1">
-          <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
-            <ArrowPathIcon className="h-6 w-6 md:h-8 md:w-8 text-primary shrink-0" /> Task Management
+    <div className="space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <h1 className="text-3xl font-bold flex items-center gap-3">
+            <ArrowPathIcon className="h-8 w-8 text-primary" /> Task Management
           </h1>
-          <p className="text-sm text-muted-foreground">Assign, track and update task statuses.</p>
+          <p className="text-muted-foreground">Assign, track and update task statuses.</p>
         </div>
 
         {(role === 'admin' || role === 'manager' || role === 'ceo') && (
           <button
             onClick={() => setIsNewOpen(true)}
-            className="w-full sm:w-auto px-4 py-2 rounded-md bg-primary text-white flex items-center justify-center gap-2 text-sm"
+            className="px-4 py-2 rounded-md bg-primary text-white flex items-center gap-2"
           >
             <PlusIcon className="h-4 w-4" /> New Task
           </button>
@@ -331,24 +328,24 @@ export default function TasksPage() {
       </div>
 
       {/* Filters */}
-      <div className="sticky top-0 z-20 bg-background/80 backdrop-blur-md border p-3 rounded-md shadow-sm flex flex-wrap gap-3">
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-          <label className="text-xs md:text-sm font-medium">Search:</label>
+      <div className="flex flex-wrap items-center gap-3 border p-3 rounded-md bg-muted/30">
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium">Search:</label>
           <input
             type="text"
             placeholder="Search by title..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="border rounded-md px-2 py-1 text-xs md:text-sm w-full sm:w-auto"
+            className="border rounded-md px-2 py-1 text-sm"
           />
         </div>
 
         <div className="flex items-center gap-2">
-          <label className="text-xs md:text-sm font-medium">Period:</label>
+          <label className="text-sm font-medium">Period:</label>
           <select
             value={periodFilter}
             onChange={(e) => setPeriodFilter(e.target.value)}
-            className="border rounded-md px-2 py-1 text-xs md:text-sm"
+            className="border rounded-md px-2 py-1 text-sm"
           >
             <option value="all">All</option>
             <option value="daily">Today</option>
@@ -359,11 +356,11 @@ export default function TasksPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <label className="text-xs md:text-sm font-medium">Status:</label>
+          <label className="text-sm font-medium">Status:</label>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="border rounded-md px-2 py-1 text-xs md:text-sm"
+            className="border rounded-md px-2 py-1 text-sm"
           >
             <option value="all">All</option>
             <option value="pending">Pending</option>
@@ -373,19 +370,28 @@ export default function TasksPage() {
         </div>
       </div>
 
-      {/* Manager View */}
+      {/* ✅ Manager View: Three Sections */}
       {role === 'manager' && (
         <>
-          <h2 className="text-lg md:text-xl font-semibold mt-4">My Tasks</h2>
-          {renderTaskTable(myTasks)}
+          <h2 className="text-xl font-semibold mt-6">My Tasks</h2>
+<div className="rounded-lg border bg-card shadow-sm overflow-x-auto">
+  {renderTaskTable(myTasks)}
+</div>
 
-          <h2 className="text-lg md:text-xl font-semibold mt-6">Other Tasks</h2>
-          {renderTaskTable(otherTasks)}
+<h2 className="text-xl font-semibold mt-8">Other Tasks</h2>
+<div className="rounded-lg border bg-card shadow-sm overflow-x-auto">
+  {renderTaskTable(otherTasks)}
+</div>
+
         </>
       )}
 
-      {/* Default View */}
-      {role !== 'manager' && renderTaskTable(tasks)}
+      {/* Default single table for all other roles */}
+      {role !== 'manager' && (
+        <div className="rounded-lg border bg-card shadow-sm overflow-x-auto">
+          {renderTaskTable(tasks)}
+        </div>
+      )}
 
       {(role === 'admin' || role === 'manager' || role === 'ceo') && (
         <NewTaskModal isOpen={isNewOpen} onClose={() => setIsNewOpen(false)} />
