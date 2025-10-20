@@ -1,0 +1,82 @@
+@media (max-width: 480px) {
+    .reports-container {
+      padding: 1rem !important;
+      gap: 1rem !important;
+    }
+  
+    .reports-header {
+      flex-direction: column !important;
+      align-items: flex-start !important;
+      gap: 1rem !important;
+    }
+  
+    .reports-header img {
+      height: 40px !important;
+    }
+  
+    .reports-header h1 {
+      font-size: 1.25rem !important;
+    }
+  
+    .reports-controls {
+      width: 100% !important;
+      flex-wrap: wrap !important;
+      justify-content: flex-start !important;
+      gap: 0.5rem !important;
+    }
+  
+    .reports-controls select,
+    .reports-controls button {
+      flex: 1 1 48%;
+      font-size: 0.875rem !important;
+      padding: 0.5rem !important;
+    }
+  
+    .recharts-responsive-container {
+      height: 250px !important;
+    }
+  
+    table {
+      font-size: 0.75rem !important;
+    }
+  
+    th,
+    td {
+      padding: 0.3rem !important;
+      white-space: nowrap !important;
+    }
+  
+    .table-wrapper {
+      overflow-x: auto !important;
+    }
+  
+    .card {
+      padding: 0.75rem !important;
+    }
+  
+    h2 {
+      font-size: 1rem !important;
+    }
+  }
+  
+  @media (max-width: 320px) {
+    .reports-controls select,
+    .reports-controls button {
+      flex: 1 1 100%;
+      font-size: 0.8rem !important;
+    }
+  
+    .reports-header h1 {
+      font-size: 1rem !important;
+    }
+  
+    table {
+      font-size: 0.7rem !important;
+    }
+  
+    th,
+    td {
+      padding: 0.25rem !important;
+    }
+  }
+  

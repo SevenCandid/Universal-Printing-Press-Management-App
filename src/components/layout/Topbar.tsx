@@ -217,17 +217,20 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
         {/* Profile Dropdown with animation */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button
-              className="relative flex items-center justify-center rounded-full border border-border overflow-hidden 
-              focus:outline-none focus:ring-2 focus:ring-ring w-8 h-8 sm:w-9 sm:h-9 transition-transform hover:scale-105"
-            >
-              <Image
-                src={avatarUrl || '/assets/avatar-default.png'}
-                alt="User Avatar"
-                fill
-                className="object-cover rounded-full"
-              />
-            </button>
+          <button
+  className="relative flex items-center justify-center rounded-full border border-border overflow-hidden 
+  focus:outline-none focus:ring-2 focus:ring-ring transition-transform hover:scale-105"
+  style={{ width: '36px', height: '36px' }} // ensures visible area
+>
+<Image
+  src={`${avatarUrl || '/assets/avatar-default.png'}`}
+  alt="User Avatar"
+  fill
+  className="object-cover rounded-full"
+/>
+
+</button>
+
           </DropdownMenuTrigger>
 
           {/* Animated Dropdown */}

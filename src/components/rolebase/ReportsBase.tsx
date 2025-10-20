@@ -76,7 +76,6 @@ export default function ReportsBase() {
         p_period_type: period,
       })
       if (error) throw error
-
       setRevenues(
         (rpcData || []).map((r: any) => ({
           summary_period: r.summary_period ?? '',
@@ -107,7 +106,6 @@ export default function ReportsBase() {
         viewer_id: userId,
       })
       if (error) throw error
-
       if (Array.isArray(rpcData)) {
         setStaffPerformance(
           rpcData.map((r: any) => ({
@@ -133,24 +131,18 @@ export default function ReportsBase() {
     fetchStaffPerformance()
   }, [fetchRevenues, fetchStaffPerformance])
 
-  // Chart content
+  // Chart
   const chartContent = useMemo(() => {
     if (!revenues.length) return null
     const chartData = revenues.filter((r) => r.summary_period !== 'TOTAL')
-
-    const valueKey = (base: string) =>
-      viewMode === 'percent' ? `${base}_percent` : base
-
-    const formatValue = (val: any) =>
-      viewMode === 'percent'
-        ? `${val}%`
-        : `₵${Number(val).toLocaleString()}`
+    const valueKey = (base: string) => (viewMode === 'percent' ? `${base}_percent` : base)
+    const formatValue = (val: any) => (viewMode === 'percent' ? `${val}%` : `₵${Number(val).toLocaleString()}`)
 
     if (chartType === 'bar') {
       return (
         <ResponsiveContainer width="100%" height={350}>
           <BarChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" />
+            <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
             <XAxis dataKey="summary_period" />
             <YAxis />
             <Tooltip formatter={(v: any) => formatValue(v)} />
@@ -166,7 +158,7 @@ export default function ReportsBase() {
     return (
       <ResponsiveContainer width="100%" height={350}>
         <LineChart data={chartData}>
-          <CartesianGrid strokeDasharray="3 3" />
+          <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
           <XAxis dataKey="summary_period" />
           <YAxis />
           <Tooltip formatter={(v: any) => formatValue(v)} />
@@ -199,17 +191,20 @@ export default function ReportsBase() {
   return (
     <div className="p-6 space-y-8">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-4">
-          <img src="/assets/logo/UPPLOGO.png" alt="UPP Logo" className="h-12 w-auto" />
-          <h1 className="text-2xl font-bold text-foreground">📊 Reports & Analytics</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <img src="/assets/logo/UPPLOGO.png" alt="UPP Logo" className="h-10 w-auto" />
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground">📊 Reports & Analytics</h1>
         </div>
+      </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+      {/* Filter toolbar - scrollable */}
+      <div className="overflow-x-auto pb-2 -mx-2">
+        <div className="flex gap-2 px-2 min-w-max">
           <select
             value={period}
             onChange={(e) => setPeriod(e.target.value as Period)}
-            className="border border-border bg-background text-foreground rounded-md p-2"
+            className="border border-border bg-background text-foreground rounded-md p-2 text-sm"
           >
             <option value="daily">Daily</option>
             <option value="weekly">Weekly</option>
@@ -219,21 +214,21 @@ export default function ReportsBase() {
             <option value="yearly">Yearly</option>
           </select>
 
-          <Button variant="outline" onClick={() => setViewMode((v) => (v === 'amount' ? 'percent' : 'amount'))}>
+          <Button variant="outline" size="sm" onClick={() => setViewMode((v) => (v === 'amount' ? 'percent' : 'amount'))}>
             {viewMode === 'amount' ? 'Show %' : 'Show ₵'}
           </Button>
 
-          <Button variant="outline" onClick={() => setChartType((c) => (c === 'line' ? 'bar' : 'line'))}>
+          <Button variant="outline" size="sm" onClick={() => setChartType((c) => (c === 'line' ? 'bar' : 'line'))}>
             {chartType === 'line' ? <BarChart2 className="h-4 w-4" /> : <LineChartIcon className="h-4 w-4" />}
             {chartType === 'line' ? 'Bar View' : 'Line View'}
           </Button>
 
-          <Button onClick={fetchRevenues} disabled={loading}>
+          <Button size="sm" onClick={fetchRevenues} disabled={loading}>
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             {loading ? 'Refreshing...' : 'Refresh'}
           </Button>
 
-          <Button onClick={downloadPDF} variant="outline">
+          <Button size="sm" onClick={downloadPDF} variant="outline">
             Export PDF
           </Button>
         </div>
@@ -242,7 +237,7 @@ export default function ReportsBase() {
       {/* Chart */}
       <Card ref={chartRef}>
         <CardContent>
-          <h2 className="text-lg font-semibold mb-4 text-foreground">
+          <h2 className="text-base sm:text-lg font-semibold mb-4 text-foreground">
             📈 Revenue Trend ({period})
           </h2>
           {revenues.length ? chartContent : <p className="text-sm text-muted-foreground">No revenue data.</p>}
@@ -253,7 +248,7 @@ export default function ReportsBase() {
       {revenues.length > 0 && (
         <Card>
           <CardContent>
-            <h2 className="text-lg font-semibold mb-4 text-foreground">💰 Revenue Summary Table</h2>
+            <h2 className="text-base sm:text-lg font-semibold mb-4 text-foreground">💰 Revenue Summary Table</h2>
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm border-collapse">
                 <thead>
@@ -292,20 +287,20 @@ export default function ReportsBase() {
 
       {/* Staff Performance */}
       {staffPerformance.length > 0 && (
-        <Card>
+        <Card className="bg-background border border-border shadow-sm">
           <CardContent>
-            <h2 className="text-lg font-semibold mb-4 text-foreground">👥 Staff Performance</h2>
+            <h2 className="text-base sm:text-lg font-semibold mb-4 text-foreground">👥 Staff Performance</h2>
             <ResponsiveContainer width="100%" height={350}>
               <BarChart data={staffPerformance}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="staff_name" />
-                <YAxis />
-                <Tooltip />
+                <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
+                <XAxis dataKey="staff_name" tick={{ fill: 'currentColor' }} />
+                <YAxis tick={{ fill: 'currentColor' }} />
+                <Tooltip contentStyle={{ backgroundColor: 'rgba(30,30,30,0.9)', color: '#fff' }} />
                 <Legend />
-                <Bar dataKey="total_tasks" fill="#2563EB" name="Total Tasks" />
-                <Bar dataKey="completed_tasks" fill="#10B981" name="Completed Tasks" />
-                <Bar dataKey="pending_tasks" fill="#FBBF24" name="Pending Tasks" />
-                <Bar dataKey="overdue_tasks" fill="#EF4444" name="Overdue" />
+                <Bar dataKey="total_tasks" fill="#3b82f6" name="Total Tasks" />
+                <Bar dataKey="completed_tasks" fill="#10b981" name="Completed" />
+                <Bar dataKey="pending_tasks" fill="#fbbf24" name="Pending" />
+                <Bar dataKey="overdue_tasks" fill="#ef4444" name="Overdue" />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
