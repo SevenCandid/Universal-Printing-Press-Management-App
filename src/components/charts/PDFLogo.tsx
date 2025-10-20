@@ -1,6 +1,5 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
 import jsPDF from 'jspdf'
 
 interface PDFLogoProps {
@@ -43,9 +42,9 @@ export function addLogoToPDF({
     
     if (watermark) {
       // Add as watermark (faint background)
-      pdf.setGState(new pdf.GState({ opacity: 0.1 }))
+      pdf.setGState({ opacity: 0.1 })
       pdf.addImage(imageData, 'PNG', x, y, width, height)
-      pdf.setGState(new pdf.GState({ opacity: 1 }))
+      pdf.setGState({ opacity: 1 })
     } else {
       // Add as regular logo
       pdf.addImage(imageData, 'PNG', x, y, width, height)
@@ -70,17 +69,3 @@ export function addWatermarkToPDF(pdf: jsPDF) {
     watermark: true
   })
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
