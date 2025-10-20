@@ -58,7 +58,8 @@ export function useRealtimeOrders() {
                 order.id === payload.new.id ? (payload.new as Order) : order
               )
             )
-            toast.info(`Order ${payload.new.order_number} updated`)
+            toast.success(`Order ${payload.new.order_number} updated`)
+
           } else if (payload.eventType === 'DELETE') {
             setOrders((prev) => prev.filter((order) => order.id !== payload.old.id))
             toast.error(`Order ${payload.old.order_number} deleted`)
