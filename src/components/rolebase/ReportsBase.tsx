@@ -193,7 +193,7 @@ export default function ReportsBase() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-3">
-          <img src="/assets/logo/UPPLOGO.png" alt="UPP Logo" className="h-10 w-auto" />
+          
           <h1 className="text-xl sm:text-2xl font-bold text-foreground">📊 Reports & Analytics</h1>
         </div>
       </div>

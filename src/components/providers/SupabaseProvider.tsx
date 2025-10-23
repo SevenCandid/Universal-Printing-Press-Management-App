@@ -21,14 +21,20 @@ export const SupabaseProvider = ({
   const [supabase] = useState(() => createSupabaseBrowserClient())
   const [session, setSession] = useState<Session | null>(initialSession)
 
-  // ✅ Automatically refresh auth tokens
   useEffect(() => {
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    // 🔹 Fetch the current session on mount to prevent "Auth session missing!" errors
+    supabase.auth.getSession().then(({ data }) => {
+      if (data?.session) setSession(data.session)
+    })
+
+    // 🔹 Keep session updated whenever auth state changes
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
     })
-    return () => subscription.unsubscribe()
+
+    return () => {
+      listener.subscription.unsubscribe()
+    }
   }, [supabase])
 
   return (

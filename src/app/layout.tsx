@@ -7,8 +7,17 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
 export const metadata = {
-  title: 'Universal Printing Press Management System',
-  description: 'Efficiently manage enquiries, follow-ups, and operations with Universal Printing Press.',
+  title: 'Universal Printing Press',
+  description:
+    'Efficiently manage enquiries, follow-ups, and operations with Universal Printing Press.',
+  manifest: '/manifest.json',
+  themeColor: '#1A237E',
+  icons: {
+    icon: '/icons/icon-192x192.png',
+    apple: '/icons/icon-512x512.png',
+  },
+  display: 'standalone',
+  background_color: '#ffffff',
 }
 
 export default async function RootLayout({
@@ -16,7 +25,7 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode
 }) {
-  // ✅ FIX: Await cookies()
+  // ✅ Await cookies() so SSR Supabase works properly
   const cookieStore = await cookies()
 
   const supabase = createServerClient(
@@ -33,6 +42,7 @@ export default async function RootLayout({
     }
   )
 
+  // ✅ Correctly fetch the session from Supabase
   const {
     data: { session },
   } = await supabase.auth.getSession()
@@ -40,20 +50,27 @@ export default async function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* ✅ Improve mobile experience */}
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+        {/* ✅ Mobile viewport optimization */}
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1.0, maximum-scale=1.0"
+        />
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#1A237E" />
+        <link rel="icon" href="/icons/icon-192x192.png" />
+        <link rel="apple-touch-icon" href="/icons/icon-512x512.png" />
       </head>
 
       <body className="min-h-screen bg-background text-foreground antialiased overflow-x-hidden">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          {/* ✅ Now session is correctly defined */}
           <SupabaseProvider session={session}>
             <UserRoleProvider>
-              {/* ✅ Responsive container */}
               <main className="container-responsive min-h-screen flex flex-col">
                 {children}
               </main>
 
-              {/* ✅ Toasts always visible and not hidden behind UI */}
+              {/* ✅ Toast Notifications */}
               <Toaster
                 position="top-center"
                 toastOptions={{

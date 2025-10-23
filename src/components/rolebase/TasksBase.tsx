@@ -8,6 +8,18 @@ import { EditTaskModal } from '@/components/ui/EditTaskModal'
 import toast from 'react-hot-toast'
 import debounce from 'lodash.debounce'
 
+// ✅ Import shadcn alert dialog for confirmation modal
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from '@/components/ui/alert-dialog'
+
 export default function TasksPage() {
   const { supabase } = useSupabase()
   const [tasks, setTasks] = useState<any[]>([])
@@ -20,6 +32,9 @@ export default function TasksPage() {
   const [periodFilter, setPeriodFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [searchTerm, setSearchTerm] = useState('')
+
+  // ✅ For delete confirmation modal
+  const [taskToDelete, setTaskToDelete] = useState<{ id: string; title: string } | null>(null)
 
   // Fetch user + role
   useEffect(() => {
@@ -133,7 +148,10 @@ export default function TasksPage() {
   }, [supabase, role, searchTerm])
 
   const openEdit = (task: any) => {
-    if (role === 'staff' && task.assigned_to !== user?.id) {
+    if (
+      (role === 'staff' || role === 'manager') &&
+      task.assigned_to !== user?.id
+    ) {
       toast.error('You can only update your own tasks.')
       return
     }
@@ -149,94 +167,119 @@ export default function TasksPage() {
     }
   }
 
-  const handleDeleted = async (id: string) => {
+  // ✅ Updated delete function to use modal confirmation
+  const handleDeleted = async () => {
+    if (!taskToDelete) return
+
     const prevTasks = tasks
-    setTasks((prev) => prev.filter((t) => t.id !== id))
-    const { error } = await supabase.from('tasks').delete().eq('id', id)
+    setTasks((prev) => prev.filter((t) => t.id !== taskToDelete.id))
+    const { error } = await supabase.from('tasks').delete().eq('id', taskToDelete.id)
     if (error) {
       setTasks(prevTasks)
       toast.error('Failed to delete task')
-    } else toast.success('Task deleted')
+    } else {
+      toast.success(`✅ "${taskToDelete.title}" deleted successfully`)
+    }
+    setTaskToDelete(null)
   }
 
   const handleStatusChange = async (taskId: string, newStatus: string, orderId: string | null) => {
-    setTasks((prev) =>
-      prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))
-    )
+    try {
+      setTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))
+      )
 
-    const { error } = await supabase.from('tasks').update({ status: newStatus }).eq('id', taskId)
-    if (error) {
-      toast.error('Failed to update task')
+      const { error: taskError } = await supabase
+        .from('tasks')
+        .update({ status: newStatus })
+        .eq('id', taskId)
+
+      if (taskError) throw taskError
+
+      if (orderId) {
+        const orderStatus =
+          newStatus === 'completed'
+            ? 'completed'
+            : newStatus === 'in_progress'
+            ? 'in_progress'
+            : 'pending'
+
+        const { error: orderError } = await supabase
+          .from('orders')
+          .update({ order_status: orderStatus })
+          .eq('id', orderId)
+
+        if (orderError) throw orderError
+      }
+
+      toast.success('Task and order updated successfully')
       fetchTasks()
-      return
+    } catch (err: any) {
+      if (err && Object.keys(err).length > 0) {
+        console.error('Error updating task/order:', err?.message || err)
+        toast.error('Failed to update task')
+      } else {
+        console.info('Status updated successfully via trigger')
+      }
+      fetchTasks()
     }
-
-    if (orderId) {
-      const orderStatus =
-        newStatus === 'completed' ? 'completed' : newStatus === 'in_progress' ? 'in_progress' : 'pending'
-      await supabase.from('orders').update({ status: orderStatus }).eq('id', orderId)
-    }
-
-    toast.success('Task updated successfully')
   }
 
-  // ✅ Split tasks for manager (NEW SECTION ADDED BELOW)
-  // ✅ Improved logic for managers
-const myTasks =
-role === 'manager' && user
-  ? tasks.filter((t) => t.assigned_to === user.id)
-  : []
+  const myTasks =
+    role === 'manager' && user
+      ? tasks.filter((t) => t.assigned_to === user.id)
+      : []
 
-const otherTasks =
-role === 'manager' && user
-  ? tasks.filter(
-      (t) =>
-        (t.assigned_by === user.id || t.assigned_by === user.email || t.assigned_by === user.name) &&
-        t.assigned_to !== user.id
-    )
-  : []
-
-
+  const otherTasks =
+    role === 'manager' && user
+      ? tasks.filter((t) => t.assigned_to !== user.id)
+      : []
 
   if (!supabase) return null
 
   const renderTaskTable = (taskList: any[]) => (
-    <table className="min-w-full divide-y divide-border">
+    <table className="min-w-full border-separate border-spacing-y-1">
       <thead className="bg-muted/50">
         <tr>
-          {['Title', 'Assigned', 'Order', 'Priority', 'Status', 'Due', 'Created', 'Actions'].map((h) => (
-            <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
+          {['Title', 'Assigned To', 'Order', 'Priority', 'Status', 'Due Date', 'Created On', 'Actions'].map((h) => (
+            <th key={h} className="px-4 py-2 text-left text-xs font-semibold uppercase text-muted-foreground whitespace-nowrap">
               {h}
             </th>
           ))}
         </tr>
       </thead>
-      <tbody className="divide-y divide-border">
+      <tbody>
         {loading ? (
           <tr>
-            <td colSpan={8} className="text-center py-8 text-muted-foreground">Loading tasks...</td>
+            <td colSpan={8} className="text-center py-8 text-muted-foreground">
+              Loading tasks...
+            </td>
           </tr>
         ) : taskList.length === 0 ? (
           <tr>
-            <td colSpan={8} className="text-center py-8 text-muted-foreground">No tasks found</td>
+            <td colSpan={8} className="text-center py-8 text-muted-foreground">
+              No tasks found
+            </td>
           </tr>
         ) : (
           taskList.map((t) => (
-            <tr key={t.id} className="hover:bg-muted/30">
-              <td className="px-4 py-3 font-medium flex flex-col">
+            <tr key={t.id} className="hover:bg-muted/30 rounded-lg">
+              <td className="px-4 py-3 font-medium align-top">
                 {t.title}
                 {role === 'manager' && (
-                  <span className="text-xs text-muted-foreground mt-1">
+                  <div className="text-xs text-muted-foreground mt-1">
                     Assigned by: {t.assigned_by === user?.id ? 'You' : t.profiles?.name || 'Unknown'}
-                  </span>
+                  </div>
                 )}
               </td>
-              <td className="px-4 py-3 text-sm flex items-center gap-2">
-                <UserIcon className="h-4 w-4 text-primary" />
-                {t.profiles?.name || 'Unassigned'}
+              <td className="px-4 py-3 text-sm align-top">
+                <div className="flex items-center gap-2">
+                  <UserIcon className="h-4 w-4 text-primary" />
+                  {t.profiles?.name || 'Unassigned'}
+                </div>
               </td>
-              <td className="px-4 py-3 text-sm">{t.orders?.customer_name || '—'}</td>
-              <td className="px-4 py-3">
+              <td className="px-4 py-3 text-sm align-top">{t.orders?.customer_name || '—'}</td>
+              <td className="px-4 py-3 align-top">
                 <span
                   className={`px-2 py-1 rounded-full text-xs font-medium ${
                     t.priority === 'high'
@@ -249,12 +292,12 @@ role === 'manager' && user
                   {t.priority}
                 </span>
               </td>
-              <td className="px-4 py-3">
-                {role === 'staff' && t.assigned_to === user?.id ? (
+              <td className="px-4 py-3 align-top">
+                {t.assigned_to === user?.id ? (
                   <select
                     value={t.status}
                     onChange={(e) => handleStatusChange(t.id, e.target.value, t.order_id)}
-                    className="border rounded-md px-2 py-1 text-xs"
+                    className="border rounded-md px-2 py-1 text-xs bg-background"
                   >
                     <option value="pending">Pending</option>
                     <option value="in_progress">In Progress</option>
@@ -274,10 +317,12 @@ role === 'manager' && user
                   </span>
                 )}
               </td>
-              <td className="px-4 py-3 text-sm">{t.due_date ? new Date(t.due_date).toLocaleDateString() : '—'}</td>
-              <td className="px-4 py-3 text-sm">{new Date(t.created_at).toLocaleDateString()}</td>
-              <td className="px-4 py-3 flex gap-2">
-                {(role === 'admin' || role === 'manager' || t.assigned_to === user?.id) && (
+              <td className="px-4 py-3 text-sm align-top">
+                {t.due_date ? new Date(t.due_date).toLocaleDateString() : '—'}
+              </td>
+              <td className="px-4 py-3 text-sm align-top">{new Date(t.created_at).toLocaleDateString()}</td>
+              <td className="px-4 py-3 align-top text-center flex gap-2">
+                {(role === 'admin' || role === 'manager' || role === 'ceo' || t.assigned_to === user?.id) && (
                   <button onClick={() => openEdit(t)} title="Edit" className="text-blue-600 hover:text-blue-800">
                     <PencilSquareIcon className="h-5 w-5" />
                   </button>
@@ -295,7 +340,11 @@ role === 'manager' && user
                   </button>
                 )}
                 {(role === 'admin' || role === 'manager' || role === 'ceo') && (
-                  <button onClick={() => handleDeleted(t.id)} title="Delete" className="text-red-600 hover:text-red-800">
+                  <button
+                    onClick={() => setTaskToDelete({ id: t.id, title: t.title })}
+                    title="Delete"
+                    className="text-red-600 hover:text-red-800"
+                  >
                     <TrashIcon className="h-5 w-5" />
                   </button>
                 )}
@@ -370,23 +419,21 @@ role === 'manager' && user
         </div>
       </div>
 
-      {/* ✅ Manager View: Three Sections */}
+      {/* Manager View */}
       {role === 'manager' && (
         <>
           <h2 className="text-xl font-semibold mt-6">My Tasks</h2>
-<div className="rounded-lg border bg-card shadow-sm overflow-x-auto">
-  {renderTaskTable(myTasks)}
-</div>
+          <div className="rounded-lg border bg-card shadow-sm overflow-x-auto">
+            {renderTaskTable(myTasks)}
+          </div>
 
-<h2 className="text-xl font-semibold mt-8">Other Tasks</h2>
-<div className="rounded-lg border bg-card shadow-sm overflow-x-auto">
-  {renderTaskTable(otherTasks)}
-</div>
-
+          <h2 className="text-xl font-semibold mt-8">Other Tasks</h2>
+          <div className="rounded-lg border bg-card shadow-sm overflow-x-auto">
+            {renderTaskTable(otherTasks)}
+          </div>
         </>
       )}
 
-      {/* Default single table for all other roles */}
       {role !== 'manager' && (
         <div className="rounded-lg border bg-card shadow-sm overflow-x-auto">
           {renderTaskTable(tasks)}
@@ -406,6 +453,31 @@ role === 'manager' && user
           onDeleted={() => fetchTasks()}
         />
       )}
+
+      {/* ✅ Modern delete confirmation modal */}
+      <AlertDialog open={!!taskToDelete} onOpenChange={(open) => !open && setTaskToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Delete</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete{' '}
+              <span className="font-semibold text-foreground">
+                “{taskToDelete?.title}”
+              </span>
+              ? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setTaskToDelete(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleted}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

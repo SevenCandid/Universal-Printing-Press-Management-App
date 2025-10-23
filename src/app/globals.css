@@ -85,23 +85,25 @@
   }
 }
 
-
+/* ✅ FIXED — replaced deprecated @variants syntax */
 @layer utilities {
-  @variants responsive {
-    .xs\:hidden {
-      @apply hidden;
+  .xs\:hidden {
+    @apply hidden;
+  }
+
+  @media (max-width: 360px) {
+    .xs\:flex {
+      display: flex !important;
     }
-    @media (max-width: 360px) {
-      .xs\:flex {
-        display: flex;
-      }
-      .xs\:hidden {
-        display: none;
-      }
+    .xs\:hidden {
+      display: none !important;
+    }
+    select {
+      font-size: 0.7rem;
+      padding: 0.25rem 0.5rem;
     }
   }
 }
-
 
 @keyframes slideDown {
   from {
@@ -118,7 +120,6 @@
   animation: slideDown 0.15s ease-out forwards;
 }
 
-
 /* Compact scrollbars inside dropdowns */
 .scrollbar-thin {
   scrollbar-width: thin;
@@ -129,19 +130,4 @@
 }
 .scrollbar-track-transparent::-webkit-scrollbar-track {
   background: transparent;
-}
-
-/* Custom xs breakpoint for phones ≤320px */
-@media (max-width: 360px) {
-  .xs\:hidden {
-    display: none !important;
-  }
-  .xs\:flex {
-    display: flex !important;
-  }
-
-  select {
-    font-size: 0.7rem;
-    padding: 0.25rem 0.5rem;
-  }
 }

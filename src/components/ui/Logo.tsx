@@ -22,7 +22,7 @@ export function Logo({ size = 'md', showText = true, className = '' }: LogoProps
     return (
       <div className={`flex items-center space-x-2 ${className}`}>
         <div className="h-8 w-8 rounded-lg bg-primary animate-pulse" />
-        {showText && <span className="text-lg font-semibold animate-pulse">Universal Printing</span>}
+        {showText && <span className="text-lg font-semibold animate-pulse">Universal Printing Press</span>}
       </div>
     )
   }

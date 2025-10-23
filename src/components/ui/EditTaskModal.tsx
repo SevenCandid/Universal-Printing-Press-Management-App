@@ -57,9 +57,10 @@ export function EditTaskModal({
     // fetch staff and orders for dropdowns
     const fetch = async () => {
       const { data: staffData, error: staffErr } = await supabase
-        .from('staff')
-        .select('id, name')
-        .order('name', { ascending: true })
+  .from('profiles')
+  .select('id, name, role')
+  .order('name', { ascending: true })
+
       if (staffErr) toast.error('Failed to load staff')
 
       const { data: ordersData, error: ordersErr } = await supabase

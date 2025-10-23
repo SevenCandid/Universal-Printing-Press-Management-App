@@ -185,7 +185,16 @@ export default function StaffBase() {
         (role) =>
           grouped[role]?.length > 0 && (
             <div key={role} className="space-y-3">
-              <h2 className="text-lg sm:text-xl font-semibold capitalize">{role} Members</h2>
+              <h2 className="text-lg sm:text-xl font-semibold">
+                  {{
+                    ceo: 'Chief Executive Officer',
+                    manager: 'Manager(s)',
+                    board: 'Board of Directors',
+                    staff: 'Staff Members',
+                    unknown: 'Others',
+                  }[role] || role}
+                </h2>
+
               <div className="overflow-x-auto border bg-card rounded-lg shadow-sm">
                 <table className="min-w-full divide-y text-xs sm:text-sm">
                   <thead className="bg-muted/50">

@@ -22,6 +22,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 
+const defaultAvatar = '/assets/logo/UPPLOGO.png'
+
 const roleLinks: Record<string, { name: string; href: string }[]> = {
   ceo: [
     { name: 'Dashboard', href: '/ceo/dashboard' },
@@ -56,7 +58,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
   const [role, setRole] = useState<string | null>(null)
   const [fullName, setFullName] = useState<string | null>(null)
   const [email, setEmail] = useState<string | null>(null)
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [avatarUrl, setAvatarUrl] = useState<string>(defaultAvatar)
   const [mounted, setMounted] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -86,7 +88,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
       }
 
       setFullName(profile?.name || 'User')
-      setAvatarUrl(profile?.avatar_url || '/assets/avatar-default.png')
+      setAvatarUrl(profile?.avatar_url || defaultAvatar)
     }
 
     loadUser()
@@ -151,7 +153,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
       return
     }
 
-    setAvatarUrl('/assets/avatar-default.png')
+    setAvatarUrl(defaultAvatar)
     toast.success('Profile picture removed')
   }
 
@@ -169,7 +171,6 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
     >
       {/* Left Section */}
       <div className="flex items-center gap-2 sm:gap-4 min-w-0">
-        {/* Hamburger menu */}
         <button
           onClick={onMenuClick}
           className="p-2 rounded-md hover:bg-accent focus:ring-2 focus:ring-ring lg:hidden"
@@ -178,12 +179,10 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
           <Bars3Icon className="h-5 w-5 sm:h-6 sm:w-6" />
         </button>
 
-        {/* Logo (smaller + responsive) */}
         <div className="flex-shrink-0 flex items-center">
           <Logo size="xs" showText={false} className="w-6 h-6 sm:w-8 sm:h-8" />
         </div>
 
-        {/* Quick Navigate */}
         <select
           onChange={handleSelect}
           className="hidden sm:block text-xs sm:text-sm border border-input rounded-md px-2 py-1 sm:px-3 sm:py-2 bg-background focus:outline-none focus:ring-2 focus:ring-ring"
@@ -202,7 +201,6 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
 
       {/* Right Section */}
       <div className="flex items-center gap-1 sm:gap-3">
-        {/* Notifications (always visible now) */}
         <button
           className="p-2 rounded-md hover:bg-accent relative focus:outline-none"
           aria-label="Notifications"
@@ -211,35 +209,25 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
           <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 bg-destructive rounded-full border border-background" />
         </button>
 
-        {/* Theme Toggle */}
         <ThemeToggle />
 
-        {/* Profile Dropdown with animation */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-          <button
-  className="relative flex items-center justify-center rounded-full border border-border overflow-hidden 
-  focus:outline-none focus:ring-2 focus:ring-ring transition-transform hover:scale-105"
-  style={{ width: '36px', height: '36px' }} // ensures visible area
->
-<Image
-  src={`${avatarUrl || '/assets/avatar-default.png'}`}
-  alt="User Avatar"
-  fill
-  className="object-cover rounded-full"
-/>
-
-</button>
-
+            <button
+              className="relative flex items-center justify-center rounded-full border border-border overflow-hidden 
+              focus:outline-none focus:ring-2 focus:ring-ring transition-transform hover:scale-105"
+              style={{ width: '36px', height: '36px' }}
+            >
+              <Image
+                src={avatarUrl || defaultAvatar}
+                alt="User Avatar"
+                fill
+                className="object-cover rounded-full"
+              />
+            </button>
           </DropdownMenuTrigger>
 
-          {/* Animated Dropdown */}
-          <DropdownMenuContent
-            align="end"
-            className="w-56 sm:w-60 max-h-[70vh] overflow-y-auto 
-            scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent 
-            animate-slideDown origin-top-right"
-          >
+          <DropdownMenuContent align="end" className="w-56 sm:w-60">
             <DropdownMenuLabel>
               <div className="flex flex-col">
                 <span className="font-medium text-foreground text-sm sm:text-base truncate">
@@ -296,7 +284,6 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* Hidden file input */}
         <input
           type="file"
           accept="image/*"

@@ -19,7 +19,7 @@ export default function SignupPage() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value })
-  }
+  } 
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()

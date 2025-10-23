@@ -14,6 +14,8 @@ import {
   Users,
   BarChart3,
   MessageSquare,
+  Archive, // Equipment icon
+  Layers,  // Materials icon
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -55,6 +57,28 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       : role
       ? defaultNav(role)
       : []
+
+  // Inventory links (always shown as a separate group)
+  const inventoryLinks = role
+  ? [
+      {
+        name: 'Equipment',
+        href: `/${role}/inventory/equipment`,
+        icon: Archive,
+      },
+      {
+        name: 'Materials',
+        href: `/${role}/inventory/materials`,
+        icon: Layers,
+      },
+      {
+        name: 'Vendors',
+        href: `/${role}/inventory/vendors`,
+        icon: Users, // or change to another icon if you prefer
+      },
+    ]
+  : []
+
 
   return (
     <>
@@ -132,12 +156,40 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             ) : (
               <p className="text-muted-foreground text-sm px-3">Loading menu...</p>
             )}
+
+            {/* Inventory group (separate) */}
+            {inventoryLinks.length > 0 && (
+              <div>
+                <h3 className="px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                  Inventory
+                </h3>
+                {inventoryLinks.map((item) => {
+                  const isActive = pathname === item.href
+                  return (
+                    <Link
+                      key={item.name}
+                      href={item.href}
+                      className={cn(
+                        'flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                        isActive
+                          ? 'bg-primary text-primary-foreground'
+                          : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                      )}
+                      onClick={onClose}
+                    >
+                      <item.icon className="h-5 w-5" />
+                      <span>{item.name}</span>
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
           </nav>
 
           {/* Footer with logo + system info */}
           <div className="px-6 py-4 border-t border-border flex flex-col items-center justify-center space-y-3">
             <div className="flex items-center justify-center">
-              <Logo size="sm" showText={false} />
+              
             </div>
             <div className="flex items-center space-x-2 text-xs text-muted-foreground">
               <BoltIcon className="h-4 w-4" />
