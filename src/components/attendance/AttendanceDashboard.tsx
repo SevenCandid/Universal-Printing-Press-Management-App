@@ -10,7 +10,9 @@ import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
 
 // icons (you can swap if you have lucide/react)
-import { ArrowRightOnRectangleIcon, ArrowLeftOnRectangleIcon, ArrowDownTrayIcon, RefreshIcon } from '@heroicons/react/24/outline'
+import { ArrowRightOnRectangleIcon, ArrowLeftOnRectangleIcon, ArrowDownTrayIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
+
+
 
 type AttendanceRow = {
   id: string
@@ -401,7 +403,8 @@ export default function AttendanceDashboard() {
 
           <div className="flex gap-2">
             <Button onClick={() => setRefreshKey((k) => k + 1)} variant="outline" className="flex items-center gap-2">
-              <RefreshIcon className="h-4 w-4" /> Refresh
+            <ArrowPathIcon className="h-5 w-5" />
+            Refresh
             </Button>
 
             {/* Check in / Check out controls */}
