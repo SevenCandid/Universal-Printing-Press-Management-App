@@ -610,7 +610,14 @@ export default function MaterialsInventory() {
                           <td className="p-2">{vendors.find((v) => v.id === p.vendor_id)?.name ?? '—'}</td>
                           <td className="p-2">{p.quantity}</td>
                           <td className="p-2">{Number(p.price_per_unit ?? 0).toFixed(2)}</td>
-                          <td className="p-2">{Number(p.total_price ?? (p.quantity * p.price_per_unit ?? 0)).toFixed(2)}</td>
+                          <td className="p-2">
+                              {Number(
+                                p.total_price !== undefined && p.total_price !== null
+                                  ? p.total_price
+                                  : p.quantity * (p.price_per_unit ?? 0)
+                              ).toFixed(2)}
+                            </td>
+
                         </tr>
                       ))
                     )}

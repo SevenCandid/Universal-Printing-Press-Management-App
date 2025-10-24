@@ -1,5 +1,5 @@
 import React from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 
 export default function ExportConfirmModal({ open, onClose, onConfirm, type }) {
@@ -12,12 +12,13 @@ export default function ExportConfirmModal({ open, onClose, onConfirm, type }) {
         <p className="text-sm text-gray-600 mb-3">
           Export materials as <strong>{type}</strong> for the selected period?
         </p>
-        <DialogFooter className="flex justify-end space-x-2">
+        {/* Replace DialogFooter with a normal div */}
+        <div className="flex justify-end space-x-2">
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
           <Button onClick={onConfirm}>Confirm & Download</Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   )

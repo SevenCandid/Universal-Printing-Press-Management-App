@@ -11,11 +11,14 @@ export const metadata = {
   description:
     'Efficiently manage enquiries, follow-ups, and operations with Universal Printing Press.',
   manifest: '/manifest.json',
-  themeColor: '#1A237E',
   icons: {
     icon: '/icons/icon-192x192.png',
     apple: '/icons/icon-512x512.png',
   },
+}
+
+export const viewport = {
+  themeColor: '#1A237E',
   display: 'standalone',
   background_color: '#ffffff',
 }
@@ -63,14 +66,12 @@ export default async function RootLayout({
 
       <body className="min-h-screen bg-background text-foreground antialiased overflow-x-hidden">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          {/* ✅ Now session is correctly defined */}
           <SupabaseProvider session={session}>
             <UserRoleProvider>
               <main className="container-responsive min-h-screen flex flex-col">
                 {children}
               </main>
 
-              {/* ✅ Toast Notifications */}
               <Toaster
                 position="top-center"
                 toastOptions={{

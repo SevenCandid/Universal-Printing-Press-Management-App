@@ -93,70 +93,132 @@ export default function VendorsManager() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">Vendors</h1>
+          <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Vendors</h1>
           <p className="text-muted-foreground text-sm">Add and manage vendor details and last purchase price.</p>
         </div>
-        <button onClick={() => { setShowModal(true); setEditing(null); setForm({}) }} className="flex items-center space-x-2 bg-primary text-primary-foreground px-4 py-2 rounded-md">
-          <PlusCircle className="h-5 w-5" />
+        <button
+          onClick={() => {
+            setShowModal(true)
+            setEditing(null)
+            setForm({})
+          }}
+          className="flex items-center justify-center space-x-2 bg-primary text-primary-foreground px-3 py-2 sm:px-4 rounded-md text-sm sm:text-base"
+        >
+          <PlusCircle className="h-4 w-4 sm:h-5 sm:w-5" />
           <span>Add Vendor</span>
         </button>
       </div>
 
+      {/* Table or cards */}
       {loading ? (
         <p className="text-muted-foreground">Loading vendors...</p>
+      ) : vendors.length === 0 ? (
+        <p className="text-center text-muted-foreground border border-border rounded-md py-6">
+          No vendors yet.
+        </p>
       ) : (
-        <div className="rounded-lg border border-border bg-card overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-muted text-muted-foreground">
-              <tr>
-                <th className="p-3 text-left">Name</th>
-                <th className="p-3">Contact</th>
-                <th className="p-3">Phone</th>
-                <th className="p-3">Email</th>
-                <th className="p-3">Last Purchase</th>
-                <th className="p-3 text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {vendors.map((v) => (
-                <tr key={v.id} className="border-b border-border hover:bg-muted/30">
-                  <td className="p-3">{v.name}</td>
-                  <td className="p-3">{v.contact_person || '—'}</td>
-                  <td className="p-3">{v.phone || '—'}</td>
-                  <td className="p-3">{v.email || '—'}</td>
-                  <td className="p-3">{v.last_purchase_price != null ? Number(v.last_purchase_price).toFixed(2) : '—'}</td>
-                  <td className="p-3 text-center space-x-3">
-                    <button onClick={() => openEdit(v)} className="text-blue-500 hover:text-blue-700"><Pencil className="h-4 w-4" /></button>
-                    <button onClick={() => deleteVendor(v.id)} className="text-red-500 hover:text-red-700"><Trash2 className="h-4 w-4" /></button>
-                  </td>
+        <>
+          {/* 🧾 Table for medium+ screens */}
+          <div className="hidden sm:block overflow-x-auto rounded-lg border border-border bg-card">
+            <table className="w-full text-sm min-w-[700px]">
+              <thead className="bg-muted text-muted-foreground">
+                <tr>
+                  <th className="p-3 text-left">Name</th>
+                  <th className="p-3">Contact</th>
+                  <th className="p-3">Phone</th>
+                  <th className="p-3">Email</th>
+                  <th className="p-3">Last Purchase</th>
+                  <th className="p-3 text-center">Actions</th>
                 </tr>
-              ))}
-              {vendors.length === 0 && <tr><td colSpan={6} className="p-4 text-center text-muted-foreground">No vendors yet.</td></tr>}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {vendors.map((v) => (
+                  <tr key={v.id} className="border-b border-border hover:bg-muted/30">
+                    <td className="p-3">{v.name}</td>
+                    <td className="p-3">{v.contact_person || '—'}</td>
+                    <td className="p-3">{v.phone || '—'}</td>
+                    <td className="p-3 truncate max-w-[150px]">{v.email || '—'}</td>
+                    <td className="p-3">{v.last_purchase_price != null ? Number(v.last_purchase_price).toFixed(2) : '—'}</td>
+                    <td className="p-3 text-center space-x-3">
+                      <button onClick={() => openEdit(v)} className="text-blue-500 hover:text-blue-700">
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button onClick={() => deleteVendor(v.id)} className="text-red-500 hover:text-red-700">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* 📱 Cards for small screens */}
+          <div className="sm:hidden grid grid-cols-1 gap-4">
+            {vendors.map((v) => (
+              <div key={v.id} className="p-4 border border-border rounded-lg bg-card shadow-sm">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="font-semibold text-base">{v.name}</p>
+                    <p className="text-xs text-muted-foreground">{v.contact_person || '—'}</p>
+                  </div>
+                  <div className="flex gap-3">
+                    <button onClick={() => openEdit(v)} className="text-blue-500 hover:text-blue-700">
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button onClick={() => deleteVendor(v.id)} className="text-red-500 hover:text-red-700">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+                <div className="mt-2 text-sm">
+                  <p><span className="font-medium">Phone:</span> {v.phone || '—'}</p>
+                  <p><span className="font-medium">Email:</span> {v.email || '—'}</p>
+                  <p><span className="font-medium">Last Purchase:</span> {v.last_purchase_price != null ? Number(v.last_purchase_price).toFixed(2) : '—'}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="bg-card border border-border rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-3">{editing ? 'Edit Vendor' : 'Add Vendor'}</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 overflow-auto">
+          <div className="bg-card border border-border rounded-lg p-5 w-full max-w-md sm:max-w-lg">
+            <h3 className="text-lg font-semibold mb-3 text-center sm:text-left">
+              {editing ? 'Edit Vendor' : 'Add Vendor'}
+            </h3>
 
             <div className="space-y-3">
-              <input type="text" placeholder="Vendor Name *" className="w-full px-3 py-2 rounded-md border border-border" value={form.name || ''} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-              <input type="text" placeholder="Contact Person" className="w-full px-3 py-2 rounded-md border border-border" value={form.contact_person || ''} onChange={(e) => setForm({ ...form, contact_person: e.target.value })} />
-              <input type="text" placeholder="Phone" className="w-full px-3 py-2 rounded-md border border-border" value={form.phone || ''} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-              <input type="email" placeholder="Email" className="w-full px-3 py-2 rounded-md border border-border" value={form.email || ''} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-              <input type="text" placeholder="Address" className="w-full px-3 py-2 rounded-md border border-border" value={form.address || ''} onChange={(e) => setForm({ ...form, address: e.target.value })} />
-              <input type="number" placeholder="Last Purchase Price" className="w-full px-3 py-2 rounded-md border border-border" value={form.last_purchase_price ?? ''} onChange={(e) => setForm({ ...form, last_purchase_price: parseFloat(e.target.value) || 0 })} />
+              <input type="text" placeholder="Vendor Name *" className="w-full px-3 py-2 rounded-md border border-border text-sm" value={form.name || ''} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <input type="text" placeholder="Contact Person" className="w-full px-3 py-2 rounded-md border border-border text-sm" value={form.contact_person || ''} onChange={(e) => setForm({ ...form, contact_person: e.target.value })} />
+              <input type="text" placeholder="Phone" className="w-full px-3 py-2 rounded-md border border-border text-sm" value={form.phone || ''} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+              <input type="email" placeholder="Email" className="w-full px-3 py-2 rounded-md border border-border text-sm" value={form.email || ''} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+              <input type="text" placeholder="Address" className="w-full px-3 py-2 rounded-md border border-border text-sm" value={form.address || ''} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+              <input type="number" placeholder="Last Purchase Price" className="w-full px-3 py-2 rounded-md border border-border text-sm" value={form.last_purchase_price ?? ''} onChange={(e) => setForm({ ...form, last_purchase_price: parseFloat(e.target.value) || 0 })} />
             </div>
 
-            <div className="flex justify-end gap-3 mt-4">
-              <button onClick={() => { setShowModal(false); setEditing(null); setForm({}) }} className="px-4 py-2 rounded-md bg-muted text-muted-foreground">Cancel</button>
-              <button onClick={saveVendor} className="px-4 py-2 rounded-md bg-primary text-primary-foreground">{editing ? 'Update' : 'Save'}</button>
+            <div className="flex flex-col sm:flex-row justify-end gap-3 mt-5">
+              <button
+                onClick={() => {
+                  setShowModal(false)
+                  setEditing(null)
+                  setForm({})
+                }}
+                className="px-4 py-2 rounded-md bg-muted text-muted-foreground text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveVendor}
+                className="px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm"
+              >
+                {editing ? 'Update' : 'Save'}
+              </button>
             </div>
           </div>
         </div>
