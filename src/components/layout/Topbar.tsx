@@ -4,7 +4,6 @@ import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Bars3Icon,
-  BellIcon,
   CameraIcon,
   TrashIcon,
 } from '@heroicons/react/24/outline'
@@ -13,6 +12,7 @@ import { Logo } from '@/components/ui/Logo'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabaseClient'
 import toast from 'react-hot-toast'
+import NotificationsBase from '@/components/rolebase/NotificationsBase'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,6 +36,13 @@ const roleLinks: Record<string, { name: string; href: string }[]> = {
     { name: 'Dashboard', href: '/manager/dashboard' },
     { name: 'Tasks', href: '/manager/tasks' },
     { name: 'Reports', href: '/manager/reports' },
+  ],
+  executive_assistant: [
+    { name: 'Dashboard', href: '/executive_assistant/dashboard' },
+    { name: 'Orders', href: '/executive_assistant/orders' },
+    { name: 'Tasks', href: '/executive_assistant/tasks' },
+    { name: 'Staff', href: '/executive_assistant/staff' },
+    { name: 'Reports', href: '/executive_assistant/reports' },
   ],
   staff: [
     { name: 'Dashboard', href: '/staff/dashboard' },
@@ -201,13 +208,9 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
 
       {/* Right Section */}
       <div className="flex items-center gap-1 sm:gap-3">
-        <button
-          className="p-2 rounded-md hover:bg-accent relative focus:outline-none"
-          aria-label="Notifications"
-        >
-          <BellIcon className="h-5 w-5 sm:h-6 sm:w-6 text-muted-foreground" />
-          <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 bg-destructive rounded-full border border-background" />
-        </button>
+        {/* 🔔 Notification System START */}
+        <NotificationsBase />
+        {/* 🔔 Notification System END */}
 
         <ThemeToggle />
 
@@ -222,6 +225,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
                 src={avatarUrl || defaultAvatar}
                 alt="User Avatar"
                 fill
+                sizes="36px"
                 className="object-cover rounded-full"
               />
             </button>

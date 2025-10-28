@@ -85,7 +85,7 @@ export default function LoginPage() {
 
   // ✅ Redirect user based on their role
   const redirectToRole = (role: string) => {
-    const validRoles = ['ceo', 'manager', 'staff', 'board']
+    const validRoles = ['ceo', 'manager', 'executive_assistant', 'staff', 'board']
     const lower = role.toLowerCase()
     router.replace(validRoles.includes(lower) ? `/${lower}/dashboard` : '/')
   }

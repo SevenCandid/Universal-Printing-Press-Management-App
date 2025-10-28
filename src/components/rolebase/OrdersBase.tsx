@@ -2,17 +2,26 @@
 
 import { FilterToolbar } from '@/components/ui/FilterToolbar'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, Fragment } from 'react'
 import {
   PlusIcon,
   UserIcon,
   ArrowDownTrayIcon,
+  PaperClipIcon,
+  CloudArrowUpIcon,
+  TrashIcon,
+  EyeIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
 } from '@heroicons/react/24/outline'
 import toast from 'react-hot-toast'
 import { useSupabase } from '@/components/providers/SupabaseProvider'
 import { StaffAssignmentModal } from '@/components/ui/StaffAssignmentModal'
 import { NewOrderModal } from '@/components/ui/NewOrderModal'
+import { EditOrderModal } from '@/components/ui/EditOrderModal'
+import { DeleteConfirmDialog } from '@/components/ui/DeleteConfirmDialog'
 import { cn } from '@/lib/utils'
+import { PencilIcon } from '@heroicons/react/24/outline'
 
 type Order = {
   id: string
@@ -27,6 +36,14 @@ type Order = {
   order_status?: string
   created_by?: string
   created_at?: string
+}
+
+type OrderFile = {
+  name: string
+  created_at: string
+  metadata?: {
+    size?: number
+  }
 }
 
 type UserProfile = {
@@ -65,15 +82,29 @@ export default function OrdersPage() {
   const [assignmentModalOpen, setAssignmentModalOpen] = useState(false)
   const [newOrderModalOpen, setNewOrderModalOpen] = useState(false)
 
+  // ✏️ Edit/Delete Modals START
+  const [editModalOpen, setEditModalOpen] = useState(false)
+  const [orderToEdit, setOrderToEdit] = useState<Order | null>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [orderToDelete, setOrderToDelete] = useState<Order | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  // ✏️ Edit/Delete Modals END
+
   // Inline editing
   const [editingPaymentStatus, setEditingPaymentStatus] = useState<string | null>(null)
   const [editingOrderStatus, setEditingOrderStatus] = useState<string | null>(null)
 
+  // 🔔 File Storage System START
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null)
+  const [orderFiles, setOrderFiles] = useState<{ [orderId: string]: OrderFile[] }>({})
+  const [uploadingFiles, setUploadingFiles] = useState<{ [orderId: string]: boolean }>({})
+  // 🔔 File Storage System END
+
   // ====== Role Permissions ======
-  const canEdit = () => ['ceo', 'manager'].includes(profile?.role?.toLowerCase() || '')
-  const canAssign = () => ['ceo', 'manager'].includes(profile?.role?.toLowerCase() || '')
+  const canEdit = () => ['ceo', 'manager', 'executive_assistant'].includes(profile?.role?.toLowerCase() || '')
+  const canAssign = () => ['ceo', 'manager', 'executive_assistant'].includes(profile?.role?.toLowerCase() || '')
   const canAddNew = () =>
-    ['ceo', 'manager', 'staff', 'board'].includes(profile?.role?.toLowerCase() || '')
+    ['ceo', 'manager', 'executive_assistant', 'staff', 'board'].includes(profile?.role?.toLowerCase() || '')
   const isReadOnly = () => profile?.role?.toLowerCase() === 'board'
 
   // ====== Fetch profile ======
@@ -276,6 +307,151 @@ export default function OrdersPage() {
     toast.success('CSV exported')
   }
 
+  // 🔔 File Storage System START
+  // Fetch files for a specific order
+  const fetchOrderFiles = async (orderId: string) => {
+    if (!supabase) return
+    try {
+      const { data, error } = await supabase.storage
+        .from('order-files')
+        .list(`orders/${orderId}`)
+
+      if (error) throw error
+
+      setOrderFiles((prev) => ({
+        ...prev,
+        [orderId]: (data || []) as OrderFile[],
+      }))
+    } catch (err) {
+      console.error('Fetch files error:', err)
+      toast.error('Failed to fetch files')
+    }
+  }
+
+  // Handle file upload
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, orderId: string) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    if (!supabase) return toast.error('Client not ready')
+
+    setUploadingFiles((prev) => ({ ...prev, [orderId]: true }))
+
+    try {
+      for (const file of Array.from(files)) {
+        const filePath = `orders/${orderId}/${file.name}`
+        const { error } = await supabase.storage.from('order-files').upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true,
+        })
+
+        if (error) throw error
+      }
+
+      toast.success(`${files.length} file(s) uploaded successfully`)
+      await fetchOrderFiles(orderId)
+
+      // Reset input
+      e.target.value = ''
+    } catch (err) {
+      console.error('Upload error:', err)
+      toast.error('Failed to upload files')
+    } finally {
+      setUploadingFiles((prev) => ({ ...prev, [orderId]: false }))
+    }
+  }
+
+  // Handle file download/view
+  const handleFileView = async (orderId: string, fileName: string) => {
+    if (!supabase) return
+    try {
+      const { data } = await supabase.storage
+        .from('order-files')
+        .createSignedUrl(`orders/${orderId}/${fileName}`, 60)
+
+      if (data?.signedUrl) {
+        window.open(data.signedUrl, '_blank')
+      }
+    } catch (err) {
+      console.error('View file error:', err)
+      toast.error('Failed to view file')
+    }
+  }
+
+  // Handle file delete
+  const handleFileDelete = async (orderId: string, fileName: string) => {
+    if (!canEdit() || isReadOnly()) return toast.error('You cannot delete files')
+    if (!supabase) return
+    if (!confirm(`Delete ${fileName}?`)) return
+
+    try {
+      const { error } = await supabase.storage.from('order-files').remove([`orders/${orderId}/${fileName}`])
+
+      if (error) throw error
+
+      toast.success('File deleted')
+      await fetchOrderFiles(orderId)
+    } catch (err) {
+      console.error('Delete file error:', err)
+      toast.error('Failed to delete file')
+    }
+  }
+
+  // Toggle order expansion
+  const toggleOrderExpansion = (orderId: string) => {
+    if (expandedOrderId === orderId) {
+      setExpandedOrderId(null)
+    } else {
+      setExpandedOrderId(orderId)
+      if (!orderFiles[orderId]) {
+        fetchOrderFiles(orderId)
+      }
+    }
+  }
+  // 🔔 File Storage System END
+
+  // ✏️ Edit/Delete Handlers START
+  const handleEditClick = (order: Order) => {
+    setOrderToEdit(order)
+    setEditModalOpen(true)
+  }
+
+  const handleDeleteClick = (order: Order) => {
+    setOrderToDelete(order)
+    setDeleteDialogOpen(true)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!orderToDelete || !supabase) return
+
+    setDeleting(true)
+    try {
+      const { error } = await supabase.from('orders').delete().eq('id', orderToDelete.id)
+
+      if (error) throw error
+
+      // Create notification for order deletion
+      await supabase.from('notifications').insert({
+        title: '🗑️ Order Deleted',
+        message: `Order #${orderToDelete.order_number} has been deleted`,
+        type: 'order',
+        link: '/orders',
+        user_role: 'all',
+        read: false,
+      })
+
+      toast.success('Order deleted successfully')
+      setDeleteDialogOpen(false)
+      setOrderToDelete(null)
+      fetchOrders(page)
+    } catch (err) {
+      console.error('Delete order error:', err)
+      toast.error('Failed to delete order')
+    } finally {
+      setDeleting(false)
+    }
+  }
+  // ✏️ Edit/Delete Handlers END
+
   // ====== Effects ======
   // fetch profile when client & session available
   useEffect(() => {
@@ -385,6 +561,7 @@ export default function OrdersPage() {
         <table className="min-w-full text-sm text-left">
           <thead className="bg-muted text-muted-foreground uppercase text-xs">
             <tr>
+              <th className="px-4 py-3 w-8"></th>
               {[
                 'Order #',
                 'Customer',
@@ -392,6 +569,7 @@ export default function OrdersPage() {
                 'Description',
                 'Qty',
                 'Amount (₵)',
+                'Payment Method',
                 'Payment',
                 'Status',
                 'Created By',
@@ -404,101 +582,247 @@ export default function OrdersPage() {
           </thead>
           <tbody className="divide-y divide-border">
             {loading ? (
-              <tr><td colSpan={11} className="text-center py-8 text-muted-foreground">Loading...</td></tr>
+              <tr><td colSpan={13} className="text-center py-8 text-muted-foreground">Loading...</td></tr>
             ) : orders.length === 0 ? (
-              <tr><td colSpan={11} className="text-center py-8 text-muted-foreground">No orders found</td></tr>
+              <tr><td colSpan={13} className="text-center py-8 text-muted-foreground">No orders found</td></tr>
             ) : (
               orders.map((o) => (
-                <tr key={o.id} className="hover:bg-muted/40">
-                  <td className="px-4 py-3 font-medium">{o.order_number}</td>
-                  <td className="px-4 py-3">{o.customer_name}</td>
-                  <td className="px-4 py-3">{o.customer_phone || '-'}</td>
-                  <td className="px-4 py-3 max-w-xs truncate">{o.item_description || '-'}</td>
-                  <td className="px-4 py-3">{o.quantity ?? '-'}</td>
-                  <td className="px-4 py-3 font-semibold">₵{o.total_amount ?? '0.00'}</td>
-
-                  {/* Payment Status */}
-                  <td className="px-4 py-3">
-                    {editingPaymentStatus === o.id ? (
-                      <select
-                        value={o.payment_status || 'pending'}
-                        onChange={(e) => updatePaymentStatus(o.id, e.target.value)}
-                        className="px-2 py-1 rounded border text-xs"
-                      >
-                        <option value="full payment">Full Payment</option>
-                        <option value="partial payment">Partial Payment</option>
-                        <option value="pending">Pending</option>
-                        <option value="pending on contract">Pending on Contract</option>
-                        <option value="partially paid on contract">Partially Paid on Contract</option>
-                      </select>
-                    ) : (
-                      <span
-                        onClick={() => canEdit() && setEditingPaymentStatus(o.id)}
-                        className={cn(
-                          'px-2 py-1 rounded-full text-xs font-medium cursor-pointer',
-                          (o.payment_status || '').toLowerCase() === 'full payment'
-                            ? 'bg-green-50 text-green-600'
-                            : (o.payment_status || '').toLowerCase().includes('partial')
-                            ? 'bg-yellow-50 text-yellow-600'
-                            : (o.payment_status || '').toLowerCase().includes('pending')
-                            ? 'bg-orange-50 text-orange-600'
-                            : 'bg-red-50 text-red-600'
-                        )}
-                      >
-                        {(o.payment_status || 'pending').toUpperCase()}
-                      </span>
-                    )}
-                  </td>
-
-                  {/* Order Status */}
-                  <td className="px-4 py-3">
-                    {editingOrderStatus === o.id ? (
-                      <select
-                        value={o.order_status || 'pending'}
-                        onChange={(e) => updateOrderStatus(o.id, e.target.value)}
-                        className="px-2 py-1 rounded border text-xs"
-                      >
-                        <option value="pending">Pending</option>
-                        <option value="in_progress">In Progress</option>
-                        <option value="completed">Completed</option>
-                        <option value="cancelled">Cancelled</option>
-                      </select>
-                    ) : (
-                      <span
-                        onClick={() => canEdit() && setEditingOrderStatus(o.id)}
-                        className={cn(
-                          'px-2 py-1 rounded-full text-xs font-medium cursor-pointer',
-                          o.order_status === 'completed'
-                            ? 'bg-green-50 text-green-600'
-                            : o.order_status === 'in_progress'
-                            ? 'bg-blue-50 text-blue-600'
-                            : o.order_status === 'cancelled'
-                            ? 'bg-red-50 text-red-600'
-                            : 'bg-gray-50 text-gray-600'
-                        )}
-                      >
-                        {(o.order_status || 'pending').toUpperCase()}
-                      </span>
-                    )}
-                  </td>
-
-                  <td className="px-4 py-3">{o.created_by || '-'}</td>
-                  <td className="px-4 py-3 text-xs">{o.created_at ? new Date(o.created_at).toLocaleString() : '-'}</td>
-                  <td className="px-4 py-3 text-right">
-                    {canAssign() && (
+                <Fragment key={o.id}>
+                  <tr className="hover:bg-muted/40">
+                    {/* 🔔 Expand Button START */}
+                    <td className="px-2 py-3">
                       <button
-                        onClick={() => {
-                          setSelectedOrder(o.id)
-                          setAssignmentModalOpen(true)
-                        }}
-                        className="flex items-center justify-end space-x-1 text-primary hover:underline"
+                        onClick={() => toggleOrderExpansion(o.id)}
+                        className="text-muted-foreground hover:text-foreground"
                       >
-                        <UserIcon className="h-4 w-4" />
-                        <span>Assign</span>
+                        {expandedOrderId === o.id ? (
+                          <ChevronUpIcon className="h-5 w-5" />
+                        ) : (
+                          <ChevronDownIcon className="h-5 w-5" />
+                        )}
                       </button>
-                    )}
-                  </td>
-                </tr>
+                    </td>
+                    {/* 🔔 Expand Button END */}
+
+                    <td className="px-4 py-3 font-medium">{o.order_number}</td>
+                    <td className="px-4 py-3">{o.customer_name}</td>
+                    <td className="px-4 py-3">{o.customer_phone || '-'}</td>
+                    <td className="px-4 py-3 max-w-xs truncate">{o.item_description || '-'}</td>
+                    <td className="px-4 py-3">{o.quantity ?? '-'}</td>
+                    <td className="px-4 py-3 font-semibold">₵{o.total_amount ?? '0.00'}</td>
+                    
+                    {/* Payment Method */}
+                    <td className="px-4 py-3">
+                      <span className="px-2 py-1 rounded-full bg-muted text-xs font-medium">
+                        {o.payment_method 
+                          ? o.payment_method
+                              .replace(/_/g, ' ')
+                              .replace(/\b\w/g, (c) => c.toUpperCase())
+                          : '-'}
+                      </span>
+                    </td>
+
+                    {/* Payment Status */}
+                    <td className="px-4 py-3">
+                      {editingPaymentStatus === o.id ? (
+                        <select
+                          value={o.payment_status || 'pending'}
+                          onChange={(e) => updatePaymentStatus(o.id, e.target.value)}
+                          className="px-2 py-1 rounded border text-xs"
+                        >
+                          <option value="full payment">Full Payment</option>
+                          <option value="partial payment">Partial Payment</option>
+                          <option value="pending">Pending</option>
+                          <option value="pending on contract">Pending on Contract</option>
+                          <option value="partially paid on contract">Partially Paid on Contract</option>
+                        </select>
+                      ) : (
+                        <span
+                          onClick={() => canEdit() && setEditingPaymentStatus(o.id)}
+                          className={cn(
+                            'px-2 py-1 rounded-full text-xs font-medium cursor-pointer',
+                            (o.payment_status || '').toLowerCase() === 'full payment'
+                              ? 'bg-green-50 text-green-600'
+                              : (o.payment_status || '').toLowerCase().includes('partial')
+                              ? 'bg-yellow-50 text-yellow-600'
+                              : (o.payment_status || '').toLowerCase().includes('pending')
+                              ? 'bg-orange-50 text-orange-600'
+                              : 'bg-red-50 text-red-600'
+                          )}
+                        >
+                          {(o.payment_status || 'pending').toUpperCase()}
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Order Status */}
+                    <td className="px-4 py-3">
+                      {editingOrderStatus === o.id ? (
+                        <select
+                          value={o.order_status || 'pending'}
+                          onChange={(e) => updateOrderStatus(o.id, e.target.value)}
+                          className="px-2 py-1 rounded border text-xs"
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="in_progress">In Progress</option>
+                          <option value="completed">Completed</option>
+                          <option value="cancelled">Cancelled</option>
+                        </select>
+                      ) : (
+                        <span
+                          onClick={() => canEdit() && setEditingOrderStatus(o.id)}
+                          className={cn(
+                            'px-2 py-1 rounded-full text-xs font-medium cursor-pointer',
+                            o.order_status === 'completed'
+                              ? 'bg-green-50 text-green-600'
+                              : o.order_status === 'in_progress'
+                              ? 'bg-blue-50 text-blue-600'
+                              : o.order_status === 'cancelled'
+                              ? 'bg-red-50 text-red-600'
+                              : 'bg-gray-50 text-gray-600'
+                          )}
+                        >
+                          {(o.order_status || 'pending').toUpperCase()}
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="px-4 py-3">{o.created_by || '-'}</td>
+                    <td className="px-4 py-3 text-xs">{o.created_at ? new Date(o.created_at).toLocaleString() : '-'}</td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1 flex-wrap">
+                        <button
+                          onClick={() => toggleOrderExpansion(o.id)}
+                          className="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                          title="View files"
+                        >
+                          <PaperClipIcon className="h-4 w-4" />
+                        </button>
+                        {/* ✏️ Edit Button START */}
+                        {canEdit() && !isReadOnly() && (
+                          <button
+                            onClick={() => handleEditClick(o)}
+                            className="p-2 text-blue-600 hover:bg-blue-600/10 rounded-lg transition-colors"
+                            title="Edit order"
+                          >
+                            <PencilIcon className="h-4 w-4" />
+                          </button>
+                        )}
+                        {/* ✏️ Edit Button END */}
+                        {/* 🗑️ Delete Button START */}
+                        {canEdit() && !isReadOnly() && (
+                          <button
+                            onClick={() => handleDeleteClick(o)}
+                            className="p-2 text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+                            title="Delete order"
+                          >
+                            <TrashIcon className="h-4 w-4" />
+                          </button>
+                        )}
+                        {/* 🗑️ Delete Button END */}
+                        {canAssign() && (
+                          <button
+                            onClick={() => {
+                              setSelectedOrder(o.id)
+                              setAssignmentModalOpen(true)
+                            }}
+                            className="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                            title="Assign staff"
+                          >
+                            <UserIcon className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+
+                  {/* 🔔 File Storage Expansion Row START */}
+                  {expandedOrderId === o.id && (
+                    <tr className="bg-muted/20">
+                      <td colSpan={13} className="px-8 py-6">
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-semibold flex items-center gap-2">
+                              <PaperClipIcon className="h-5 w-5" />
+                              Order Files
+                            </h3>
+                          </div>
+
+                          {/* Upload Section */}
+                          <div className="border-2 border-dashed border-border rounded-lg p-6 bg-background">
+                            <label
+                              htmlFor={`file-upload-${o.id}`}
+                              className="flex flex-col items-center justify-center cursor-pointer"
+                            >
+                              <CloudArrowUpIcon className="h-12 w-12 text-muted-foreground mb-2" />
+                              <span className="text-sm font-medium text-foreground">
+                                {uploadingFiles[o.id] ? 'Uploading...' : 'Click to upload files'}
+                              </span>
+                              <span className="text-xs text-muted-foreground mt-1">
+                                or drag and drop
+                              </span>
+                              <input
+                                id={`file-upload-${o.id}`}
+                                type="file"
+                                multiple
+                                onChange={(e) => handleFileUpload(e, o.id)}
+                                className="hidden"
+                                disabled={uploadingFiles[o.id]}
+                              />
+                            </label>
+                          </div>
+
+                          {/* Files List */}
+                          <div className="space-y-2">
+                            {orderFiles[o.id] && orderFiles[o.id].length > 0 ? (
+                              orderFiles[o.id].map((file) => (
+                                <div
+                                  key={file.name}
+                                  className="flex items-center justify-between p-3 border rounded-lg bg-card hover:bg-muted/40"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <PaperClipIcon className="h-5 w-5 text-muted-foreground" />
+                                    <div>
+                                      <p className="text-sm font-medium">{file.name}</p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {file.metadata?.size
+                                          ? `${(file.metadata.size / 1024).toFixed(2)} KB`
+                                          : 'Unknown size'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      onClick={() => handleFileView(o.id, file.name)}
+                                      className="p-2 hover:bg-muted rounded"
+                                      title="View/Download"
+                                    >
+                                      <EyeIcon className="h-4 w-4 text-primary" />
+                                    </button>
+                                    {canEdit() && !isReadOnly() && (
+                                      <button
+                                        onClick={() => handleFileDelete(o.id, file.name)}
+                                        className="p-2 hover:bg-destructive/10 rounded"
+                                        title="Delete"
+                                      >
+                                        <TrashIcon className="h-4 w-4 text-destructive" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-sm text-muted-foreground text-center py-4">
+                                No files uploaded yet
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  {/* 🔔 File Storage Expansion Row END */}
+                </Fragment>
               ))
             )}
           </tbody>
@@ -533,6 +857,32 @@ export default function OrdersPage() {
         />
       )}
       <NewOrderModal isOpen={newOrderModalOpen} onClose={() => setNewOrderModalOpen(false)} />
+
+      {/* ✏️ Edit Order Modal */}
+      <EditOrderModal
+        isOpen={editModalOpen}
+        onClose={() => {
+          setEditModalOpen(false)
+          setOrderToEdit(null)
+        }}
+        order={orderToEdit}
+        onSuccess={() => {
+          fetchOrders(page)
+        }}
+      />
+
+      {/* 🗑️ Delete Confirmation Dialog */}
+      <DeleteConfirmDialog
+        isOpen={deleteDialogOpen}
+        onClose={() => {
+          setDeleteDialogOpen(false)
+          setOrderToDelete(null)
+        }}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Order"
+        message={`Are you sure you want to delete Order #${orderToDelete?.order_number}? This action cannot be undone.`}
+        loading={deleting}
+      />
     </div>
   )
 }

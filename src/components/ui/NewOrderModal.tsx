@@ -5,6 +5,7 @@ import { Dialog } from '@headlessui/react'
 import { XMarkIcon } from '@heroicons/react/24/outline'
 import { supabase } from '@/lib/supabaseClient'
 import toast from 'react-hot-toast'
+import { useOffline } from '@/hooks/useOffline'
 
 export function NewOrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const [formData, setFormData] = useState({
@@ -13,11 +14,12 @@ export function NewOrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
     item_description: '',
     quantity: '',
     total_amount: '',
-    payment_method: '',
+    payment_method: 'cash',
   })
   const [loading, setLoading] = useState(false)
+  const { isOnline, queueOperation } = useOffline()
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value })
   }
 
@@ -27,34 +29,63 @@ export function NewOrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
 
     const orderNumber = 'ORD-' + Math.floor(100000 + Math.random() * 900000)
 
-    const { error } = await supabase.from('orders').insert([
-      {
-        order_number: orderNumber,
-        customer_name: formData.customer_name,
-        customer_phone: formData.customer_phone,
-        item_description: formData.item_description,
-        quantity: Number(formData.quantity),
-        total_amount: Number(formData.total_amount),
-        payment_method: formData.payment_method,
-        payment_status: 'pending',
-        order_status: 'pending',
-        created_by: 'Admin',
-      },
-    ])
+    const orderData = {
+      order_number: orderNumber,
+      customer_name: formData.customer_name,
+      customer_phone: formData.customer_phone,
+      item_description: formData.item_description,
+      quantity: Number(formData.quantity),
+      total_amount: Number(formData.total_amount),
+      payment_method: formData.payment_method,
+      payment_status: 'pending',
+      order_status: 'pending',
+      created_by: 'Admin',
+    }
 
-    if (error) {
-      toast.error(`❌ Failed to create order: ${error.message}`)
-    } else {
-      toast.success('✅ Order created successfully!')
-      setFormData({
-        customer_name: '',
-        customer_phone: '',
-        item_description: '',
-        quantity: '',
-        total_amount: '',
-        payment_method: '',
-      })
-      onClose()
+    try {
+      if (isOnline) {
+        // Online - save directly to database
+        const { error } = await supabase.from('orders').insert([orderData])
+
+        if (error) {
+          toast.error(`❌ Failed to create order: ${error.message}`)
+        } else {
+          toast.success('✅ Order created successfully!')
+          setFormData({
+            customer_name: '',
+            customer_phone: '',
+            item_description: '',
+            quantity: '',
+            total_amount: '',
+            payment_method: 'cash',
+          })
+          onClose()
+        }
+      } else {
+        // Offline - queue for later sync
+        await queueOperation({
+          type: 'CREATE',
+          table: 'orders',
+          data: orderData,
+        })
+        
+        toast.success('📱 Order saved offline! Will sync when online.', {
+          icon: '🔄',
+          duration: 4000,
+        })
+        
+        setFormData({
+          customer_name: '',
+          customer_phone: '',
+          item_description: '',
+          quantity: '',
+          total_amount: '',
+          payment_method: 'cash',
+        })
+        onClose()
+      }
+    } catch (error: any) {
+      toast.error(`❌ Failed to create order: ${error.message || 'Unknown error'}`)
     }
 
     setLoading(false)
@@ -85,11 +116,10 @@ export function NewOrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
             <input
               type="text"
               name="customer_phone"
-              placeholder="Customer Mobile Number"
+              placeholder="Customer Mobile Number (Optional)"
               value={formData.customer_phone}
               onChange={handleChange}
               className="w-full rounded-md border border-border p-2 bg-background"
-              required
             />
             <textarea
               name="item_description"
@@ -117,14 +147,17 @@ export function NewOrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
                 className="rounded-md border border-border p-2 bg-background"
               />
             </div>
-            <input
-              type="text"
+            <select
               name="payment_method"
-              placeholder="Payment Method (Cash, MoMo, etc)"
               value={formData.payment_method}
               onChange={handleChange}
               className="w-full rounded-md border border-border p-2 bg-background"
-            />
+            >
+              <option value="cash">Cash</option>
+              <option value="momo">Mobile Money</option>
+              <option value="bank_transfer">Bank Transfer</option>
+              <option value="cheque">Cheque</option>
+            </select>
 
             <button
               type="submit"

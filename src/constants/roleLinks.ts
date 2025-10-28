@@ -24,6 +24,13 @@ export const roleNav: Record<
     { name: 'Users', href: '/manager/staff', icon: UsersIcon },
     { name: 'Reports', href: '/manager/reports', icon: ChartBarIcon },
   ],
+  executive_assistant: [
+    { name: 'Dashboard', href: '/executive_assistant/dashboard', icon: HomeIcon },
+    { name: 'Orders', href: '/executive_assistant/orders', icon: DocumentTextIcon },
+    { name: 'Tasks', href: '/executive_assistant/tasks', icon: ClipboardDocumentListIcon },
+    { name: 'Users', href: '/executive_assistant/staff', icon: UsersIcon },
+    { name: 'Reports', href: '/executive_assistant/reports', icon: ChartBarIcon },
+  ],
   staff: [
     { name: 'Dashboard', href: '/staff/dashboard', icon: HomeIcon },
     { name: 'Orders', href: '/staff/orders', icon: DocumentTextIcon },

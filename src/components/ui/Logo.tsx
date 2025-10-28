@@ -19,39 +19,73 @@ export function Logo({ size = 'md', showText = true, className = '' }: LogoProps
   }, [])
 
   if (!mounted) {
+    const loadingSizeClasses = {
+      xs: 'h-8 w-8',
+      sm: 'h-9 w-9',
+      md: 'h-12 w-12',
+      lg: 'h-16 w-16'
+    }
+    const loadingTextClasses = {
+      xs: 'text-xs',
+      sm: 'text-sm',
+      md: 'text-base',
+      lg: 'text-xl'
+    }
+    const loadingSpacing = {
+      xs: 'space-x-1.5',
+      sm: 'space-x-2',
+      md: 'space-x-3',
+      lg: 'space-x-4'
+    }
     return (
-      <div className={`flex items-center space-x-2 ${className}`}>
-        <div className="h-8 w-8 rounded-lg bg-primary animate-pulse" />
-        {showText && <span className="text-lg font-semibold animate-pulse">Universal Printing Press</span>}
+      <div className={`flex items-center ${loadingSpacing[size]} ${className}`}>
+        <div className={`${loadingSizeClasses[size]} rounded-lg bg-primary/20 animate-pulse`} />
+        {showText && <span className={`${loadingTextClasses[size]} font-bold animate-pulse`}>Universal Printing Press</span>}
       </div>
     )
   }
 
   const sizeClasses = {
-    sm: 'h-6 w-6',
-    md: 'h-8 w-8',
-    lg: 'h-12 w-12'
+    xs: 'h-8 w-8',
+    sm: 'h-9 w-9',
+    md: 'h-12 w-12',
+    lg: 'h-16 w-16'
   }
 
   const textSizeClasses = {
+    xs: 'text-xs',
     sm: 'text-sm',
-    md: 'text-lg',
-    lg: 'text-2xl'
+    md: 'text-base',
+    lg: 'text-xl'
+  }
+
+  const spacingClasses = {
+    xs: 'space-x-1.5',
+    sm: 'space-x-2',
+    md: 'space-x-3',
+    lg: 'space-x-4'
+  }
+
+  const imageSize = {
+    xs: 28,
+    sm: 32,
+    md: 44,
+    lg: 60
   }
 
   return (
-    <div className={`flex items-center space-x-2 ${className}`}>
-      <div className={`${sizeClasses[size]} rounded-lg bg-primary flex items-center justify-center overflow-hidden`}>
+    <div className={`flex items-center ${spacingClasses[size]} ${className}`}>
+      <div className={`${sizeClasses[size]} rounded-lg bg-primary/10 p-1 flex items-center justify-center overflow-hidden shadow-sm border border-primary/20`}>
         <Image
           src={theme === 'dark' ? '/assets/logo/logo-dark.png' : '/assets/logo/logo.png'}
           alt="Universal Printing Press Logo"
-          width={size === 'sm' ? 24 : size === 'md' ? 32 : 48}
-          height={size === 'sm' ? 24 : size === 'md' ? 32 : 48}
+          width={imageSize[size]}
+          height={imageSize[size]}
           className="object-contain"
         />
       </div>
       {showText && (
-        <span className={`${textSizeClasses[size]} font-semibold text-foreground`}>
+        <span className={`${textSizeClasses[size]} font-bold text-foreground tracking-tight`}>
           Universal Printing Press
         </span>
       )}

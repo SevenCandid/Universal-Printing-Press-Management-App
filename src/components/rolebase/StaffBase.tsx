@@ -140,7 +140,7 @@ export default function StaffBase() {
     grouped[r].sort((a, b) => (a.is_active === b.is_active ? 0 : a.is_active ? -1 : 1))
   )
 
-  const rolesOrder = ['ceo', 'manager', 'board', 'staff', 'unknown']
+  const rolesOrder = ['ceo', 'manager', 'executive_assistant', 'board', 'staff', 'unknown']
 
   return (
     <div className="space-y-6 sm:space-y-8">
@@ -158,7 +158,8 @@ export default function StaffBase() {
           </p>
         </div>
 
-        {userRole === 'ceo' && (
+        {/* ✅ Add User button - Currently disabled */}
+        {/* {userRole === 'ceo' && (
           <button
             onClick={() => setModalOpen(true)}
             className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-sm sm:text-base bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition w-full sm:w-auto"
@@ -166,7 +167,7 @@ export default function StaffBase() {
             <PlusIcon className="h-5 w-5" />
             <span>Add User</span>
           </button>
-        )}
+        )} */}
       </div>
 
       {/* Search Bar */}
@@ -189,6 +190,7 @@ export default function StaffBase() {
                   {{
                     ceo: 'Chief Executive Officer',
                     manager: 'Manager(s)',
+                    executive_assistant: 'Executive Assistant(s)',
                     board: 'Board of Directors',
                     staff: 'Staff Members',
                     unknown: 'Others',
@@ -271,9 +273,10 @@ export default function StaffBase() {
           )
       )}
 
-      {userRole === 'ceo' && (
+      {/* ✅ Add User Modal - Currently disabled */}
+      {/* {userRole === 'ceo' && (
         <NewStaffModal isOpen={modalOpen} onClose={() => setModalOpen(false)} />
-      )}
+      )} */}
     </div>
   )
 }

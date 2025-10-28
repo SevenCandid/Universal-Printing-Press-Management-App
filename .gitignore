@@ -80,3 +80,4 @@ temp/
 # === Project-specific ===
 /.vercel
 .vercel
+".env.local" 

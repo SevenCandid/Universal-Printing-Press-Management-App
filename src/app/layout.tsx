@@ -3,6 +3,9 @@ import { ThemeProvider } from '@/components/providers/ThemeProvider'
 import { Toaster } from 'react-hot-toast'
 import { UserRoleProvider } from '@/context/UserRoleContext'
 import { SupabaseProvider } from '@/components/providers/SupabaseProvider'
+import { OfflineProvider } from '@/components/providers/OfflineProvider'
+import GlobalNotifier from '@/components/GlobalNotifier'
+import OfflineIndicator from '@/components/ui/OfflineIndicator'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
@@ -67,22 +70,31 @@ export default async function RootLayout({
       <body className="min-h-screen bg-background text-foreground antialiased overflow-x-hidden">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <SupabaseProvider session={session}>
-            <UserRoleProvider>
-              <main className="container-responsive min-h-screen flex flex-col">
-                {children}
-              </main>
+            <OfflineProvider>
+              {/* 🔔 Notification System START */}
+              <GlobalNotifier>
+                <UserRoleProvider>
+                  <main className="container-responsive min-h-screen flex flex-col">
+                    {children}
+                  </main>
 
-              <Toaster
-                position="top-center"
-                toastOptions={{
-                  style: {
-                    fontSize: '0.875rem',
-                    maxWidth: '90vw',
-                    wordBreak: 'break-word',
-                  },
-                }}
-              />
-            </UserRoleProvider>
+                  <Toaster
+                    position="top-center"
+                    toastOptions={{
+                      style: {
+                        fontSize: '0.875rem',
+                        maxWidth: '90vw',
+                        wordBreak: 'break-word',
+                      },
+                    }}
+                  />
+                  
+                  {/* Offline Indicator */}
+                  <OfflineIndicator />
+                </UserRoleProvider>
+              </GlobalNotifier>
+              {/* 🔔 Notification System END */}
+            </OfflineProvider>
           </SupabaseProvider>
         </ThemeProvider>
       </body>

@@ -49,7 +49,7 @@ export async function middleware(req: NextRequest) {
 
   // 5️⃣ redirect based on role-access logic
   if (path.startsWith('/dashboard')) {
-    if (!['ceo', 'board', 'manager'].includes(role)) {
+    if (!['ceo', 'board', 'manager', 'executive_assistant'].includes(role)) {
       const redirectUrl = req.nextUrl.clone()
       redirectUrl.pathname = '/tasks'
       return NextResponse.redirect(redirectUrl)
@@ -57,7 +57,7 @@ export async function middleware(req: NextRequest) {
   }
 
   if (path.startsWith('/tasks')) {
-    if (!['staff', 'manager', 'ceo', 'board'].includes(role)) {
+    if (!['staff', 'manager', 'executive_assistant', 'ceo', 'board'].includes(role)) {
       const redirectUrl = req.nextUrl.clone()
       redirectUrl.pathname = '/login'
       return NextResponse.redirect(redirectUrl)

@@ -327,7 +327,7 @@ export default function TasksPage() {
                     <PencilSquareIcon className="h-5 w-5" />
                   </button>
                 )}
-                {(role === 'ceo' || role === 'manager') && (
+                {(role === 'ceo' || role === 'manager' || role === 'executive_assistant') && (
                   <button
                     onClick={() => {
                       const newAssignee = prompt('Enter new staff ID to reassign:')

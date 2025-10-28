@@ -26,8 +26,8 @@ export default function SignupPage() {
     setLoading(true)
 
     try {
-      // Require staff ID only for manager and staff
-      if ((formData.role === 'staff' || formData.role === 'manager') && !formData.staff_id.trim()) {
+      // Require staff ID only for manager, executive_assistant, and staff
+      if ((formData.role === 'staff' || formData.role === 'manager' || formData.role === 'executive_assistant') && !formData.staff_id.trim()) {
         toast.error('Staff ID is required for this role.')
         setLoading(false)
         return
@@ -41,7 +41,7 @@ export default function SignupPage() {
             name: formData.name.trim(),
             role: formData.role,
             staff_id:
-              formData.role === 'manager' || formData.role === 'staff'
+              formData.role === 'manager' || formData.role === 'executive_assistant' || formData.role === 'staff'
                 ? formData.staff_id.trim()
                 : null,
           },
@@ -103,10 +103,11 @@ export default function SignupPage() {
             <option value="ceo">CEO</option>
             <option value="board">Board Member</option>
             <option value="manager">Manager</option>
+            <option value="executive_assistant">Executive Assistant</option>
             <option value="staff">Staff</option>
           </select>
 
-          {(formData.role === 'manager' || formData.role === 'staff') && (
+          {(formData.role === 'manager' || formData.role === 'executive_assistant' || formData.role === 'staff') && (
             <input
               type="text"
               name="staff_id"

@@ -1,5 +1,5 @@
-import AttendanceBase from "@/components/rolebase/AttendanceBase"
+import AttendanceBase from '@/components/rolebase/AttendanceBase'
 
 export default function CEOAttendancePage() {
-  return <AttendanceBase/>
+  return <AttendanceBase role="ceo" />
 }

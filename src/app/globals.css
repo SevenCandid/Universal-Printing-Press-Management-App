@@ -120,6 +120,17 @@
   animation: slideDown 0.15s ease-out forwards;
 }
 
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 /* Compact scrollbars inside dropdowns */
 .scrollbar-thin {
   scrollbar-width: thin;

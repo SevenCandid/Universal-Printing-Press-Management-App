@@ -16,6 +16,11 @@ import {
   MessageSquare,
   Archive, // Equipment icon
   Layers,  // Materials icon
+  UserCircle, // Customers icon
+  FolderOpen, // Files icon
+  BookOpen, // Handbook icon
+  Clock, // Attendance icon
+  Receipt, // Expenses icon
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -41,10 +46,15 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const defaultNav = (r: string) => [
     { name: 'Dashboard', href: `/${r}/dashboard`, icon: LayoutDashboard },
     { name: 'Orders', href: `/${r}/orders`, icon: ClipboardList },
+    { name: 'Customers', href: `/${r}/customers`, icon: UserCircle },
+    { name: 'Files', href: `/${r}/files`, icon: FolderOpen },
     { name: 'Enquiries', href: `/${r}/enquiries`, icon: MessageSquare },
     { name: 'Tasks', href: `/${r}/tasks`, icon: Briefcase },
     { name: 'Users', href: `/${r}/staff`, icon: Users },
+    { name: 'Attendance', href: `/${r}/attendance`, icon: Clock },
+    { name: 'Expenses', href: `/${r}/expenses`, icon: Receipt },
     { name: 'Reports', href: `/${r}/reports`, icon: BarChart3 },
+    { name: 'Handbook', href: `/${r}/handbook`, icon: BookOpen },
   ]
 
   // ✅ Merge roleNav overrides (preserve structure)
@@ -82,30 +92,35 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
   return (
     <>
-      {/* Mobile overlay */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
-          onClick={onClose}
-        />
-      )}
-
-      {/* Sidebar */}
+      {/* Mobile overlay with animation */}
       <div
         className={cn(
-          'fixed inset-y-0 left-0 z-50 w-64 transform bg-card border-r border-border transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0',
-          isOpen ? 'translate-x-0' : '-translate-x-full'
+          'fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden transition-all duration-500 ease-out',
+          isOpen 
+            ? 'opacity-100 pointer-events-auto' 
+            : 'opacity-0 pointer-events-none'
+        )}
+        onClick={onClose}
+      />
+
+      {/* Sidebar with smooth animation */}
+      <div
+        className={cn(
+          'fixed inset-y-0 left-0 z-50 w-64 transform bg-card border-r border-border transition-all duration-500 ease-out lg:translate-x-0 lg:static lg:inset-0',
+          isOpen 
+            ? 'translate-x-0 shadow-2xl' 
+            : '-translate-x-full shadow-none'
         )}
       >
         <div className="flex h-full flex-col">
           {/* Header with padded logo */}
-          <div className="flex h-16 items-center justify-between px-6 py-2 border-b border-border">
-            <div className="flex items-center space-x-2">
+          <div className="flex h-18 items-center justify-between px-4 py-4 border-b border-border bg-gradient-to-r from-primary/5 to-transparent">
+            <div className="flex items-center space-x-3 pl-2">
               <Logo size="md" showText={true} />
             </div>
             <button
               onClick={onClose}
-              className="lg:hidden p-2 rounded-md hover:bg-accent"
+              className="lg:hidden p-2 rounded-md hover:bg-accent transition-colors"
               aria-label="Close sidebar"
             >
               <XMarkIcon className="h-5 w-5" />
@@ -133,18 +148,22 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <h3 className="px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
                   {role?.toUpperCase()} Menu
                 </h3>
-                {navigation.map((item) => {
+                {navigation.map((item, index) => {
                   const isActive = pathname === item.href
                   return (
                     <Link
                       key={item.name}
                       href={item.href}
                       className={cn(
-                        'flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                        'flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200',
+                        'hover:scale-105 hover:shadow-md active:scale-95',
                         isActive
-                          ? 'bg-primary text-primary-foreground'
+                          ? 'bg-primary text-primary-foreground shadow-lg'
                           : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                       )}
+                      style={{
+                        animation: isOpen ? `slideInLeft 0.3s ease-out ${index * 0.05}s both` : 'none'
+                      }}
                       onClick={onClose}
                     >
                       <item.icon className="h-5 w-5" />
@@ -163,18 +182,22 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <h3 className="px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
                   Inventory
                 </h3>
-                {inventoryLinks.map((item) => {
+                {inventoryLinks.map((item, index) => {
                   const isActive = pathname === item.href
                   return (
                     <Link
                       key={item.name}
                       href={item.href}
                       className={cn(
-                        'flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                        'flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200',
+                        'hover:scale-105 hover:shadow-md active:scale-95',
                         isActive
-                          ? 'bg-primary text-primary-foreground'
+                          ? 'bg-primary text-primary-foreground shadow-lg'
                           : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                       )}
+                      style={{
+                        animation: isOpen ? `slideInLeft 0.3s ease-out ${(navigation.length + index) * 0.05}s both` : 'none'
+                      }}
                       onClick={onClose}
                     >
                       <item.icon className="h-5 w-5" />

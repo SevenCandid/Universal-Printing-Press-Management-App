@@ -41,6 +41,8 @@ export default function DashboardBase({ role }: { role: string }) {
     totalPending: 0,
   })
 
+  const [activeStaffCount, setActiveStaffCount] = useState(0)
+
   const fetchSummary = async () => {
     if (!session) return
     setLoading(true)
@@ -81,17 +83,55 @@ export default function DashboardBase({ role }: { role: string }) {
     }
   }
 
+  // Fetch active staff count
+  const fetchActiveStaffCount = async () => {
+    if (!supabase) return
+    try {
+      const { count, error } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .in('role', ['staff', 'ceo', 'executive_assistant', 'manager'])
+      
+      if (error) throw error
+      setActiveStaffCount(count || 0)
+    } catch (err) {
+      console.error('Error fetching active staff count:', err)
+    }
+  }
+
   useEffect(() => {
     fetchSummary()
+    fetchActiveStaffCount()
   }, [period, session])
 
-  // ✅ Realtime updates
+  // ✅ Realtime updates for orders
   useEffect(() => {
     if (!supabase) return
     const channel = supabase
       .channel('dashboard-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
         fetchSummary()
+      })
+      .subscribe()
+
+    return () => {
+      try {
+        supabase.removeChannel(channel)
+      } catch {
+        // fallback for older SDKs
+        // @ts-ignore
+        channel?.unsubscribe?.()
+      }
+    }
+  }, [supabase])
+
+  // ✅ Realtime updates for staff
+  useEffect(() => {
+    if (!supabase) return
+    const channel = supabase
+      .channel('staff-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+        fetchActiveStaffCount()
       })
       .subscribe()
 
@@ -161,7 +201,15 @@ export default function DashboardBase({ role }: { role: string }) {
           {role.toUpperCase()} Dashboard
         </h1>
         <div className="flex justify-center sm:justify-end">
-          <Button onClick={fetchSummary} disabled={loading} size="sm" className="w-full sm:w-auto">
+          <Button 
+            onClick={() => {
+              fetchSummary()
+              fetchActiveStaffCount()
+            }} 
+            disabled={loading} 
+            size="sm" 
+            className="w-full sm:w-auto"
+          >
             <RefreshCwIcon className={cn('h-4 w-4 mr-1', loading && 'animate-spin')} />
             {loading ? 'Refreshing...' : 'Refresh'}
           </Button>
@@ -184,7 +232,17 @@ export default function DashboardBase({ role }: { role: string }) {
       </div>
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 sm:gap-4">
+        <Card className="bg-gradient-to-br from-blue-500/10 to-blue-600/10 border-blue-500/20">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-xs sm:text-sm text-muted-foreground mb-1">Active Staff</p>
+            <h2 className="text-lg sm:text-2xl font-bold text-blue-600 flex items-center gap-2">
+              <span className="text-2xl">👥</span>
+              {activeStaffCount}
+            </h2>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">All team members</p>
+          </CardContent>
+        </Card>
         <Card><CardContent className="p-3 sm:p-4"><p className="text-xs sm:text-sm text-muted-foreground">Total Revenue</p><h2 className="text-lg sm:text-2xl font-bold">{formatCurrency(totals.totalRevenue)}</h2></CardContent></Card>
         <Card><CardContent className="p-3 sm:p-4"><p className="text-xs sm:text-sm text-muted-foreground">Total Orders</p><h2 className="text-lg sm:text-2xl font-bold">{totals.totalOrders}</h2></CardContent></Card>
         <Card><CardContent className="p-3 sm:p-4"><p className="text-xs sm:text-sm text-muted-foreground">Full Payments</p><h2 className="text-lg sm:text-2xl font-bold text-green-600">{formatCurrency(totals.totalFull)}</h2></CardContent></Card>
