@@ -35,7 +35,7 @@ export async function showServiceWorkerNotification(
     const registration = await navigator.serviceWorker.ready;
 
     // Show notification via service worker
-    await registration.showNotification(options.title, {
+    const notificationOptions: NotificationOptions & { vibrate?: number[] } = {
       body: options.body,
       icon: options.icon || '/icons/icon-192x192.png',
       badge: options.badge || '/icons/icon-192x192.png',
@@ -45,7 +45,9 @@ export async function showServiceWorkerNotification(
       vibrate: options.vibrate || [200, 100, 200],
       actions: options.actions || [],
       silent: false,
-    });
+    };
+    
+    await registration.showNotification(options.title, notificationOptions);
 
     console.log('✅ Service worker notification shown');
     return true;
