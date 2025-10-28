@@ -15,8 +15,20 @@ export const metadata = {
     'Efficiently manage enquiries, follow-ups, and operations with Universal Printing Press.',
   manifest: '/manifest.json',
   icons: {
-    icon: '/icons/icon-192x192.png',
-    apple: '/icons/icon-512x512.png',
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icons/icon-512x512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/icons/icon-512x512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    shortcut: '/favicon.ico',
+  },
+  openGraph: {
+    title: 'Universal Printing Press',
+    description: 'Efficiently manage enquiries, follow-ups, and operations with Universal Printing Press.',
+    images: ['/icons/icon-512x512.png'],
   },
 }
 
@@ -61,10 +73,6 @@ export default async function RootLayout({
           name="viewport"
           content="width=device-width, initial-scale=1.0, maximum-scale=1.0"
         />
-        <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#1A237E" />
-        <link rel="icon" href="/icons/icon-192x192.png" />
-        <link rel="apple-touch-icon" href="/icons/icon-512x512.png" />
       </head>
 
       <body className="min-h-screen bg-background text-foreground antialiased overflow-x-hidden">
