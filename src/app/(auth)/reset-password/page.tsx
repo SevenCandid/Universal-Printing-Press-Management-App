@@ -37,14 +37,11 @@ export default function ResetPasswordPage() {
       <div className="w-full max-w-md bg-card border border-border rounded-lg shadow-2xl p-6 md:p-8">
         {/* Logo */}
         <div className="flex justify-center mb-6">
-          <div className="relative w-24 h-24 md:w-32 md:h-32">
-            <Image
+          <div className="w-24 h-24 md:w-32 md:h-32 flex items-center justify-center">
+            <img
               src="/UPPLOGO.png"
               alt="UPP Logo"
-              fill
-              className="object-contain"
-              priority
-              unoptimized
+              className="object-contain w-full h-full"
             />
           </div>
         </div>

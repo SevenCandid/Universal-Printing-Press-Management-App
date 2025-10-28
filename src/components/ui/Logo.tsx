@@ -1,6 +1,5 @@
 'use client'
 
-import Image from 'next/image'
 import { useTheme } from 'next-themes'
 import { useState, useEffect } from 'react'
 
@@ -76,14 +75,12 @@ export function Logo({ size = 'md', showText = true, className = '' }: LogoProps
   return (
     <div className={`flex items-center ${spacingClasses[size]} ${className}`}>
       <div className={`${sizeClasses[size]} rounded-lg bg-primary/10 p-1 flex items-center justify-center overflow-hidden shadow-sm border border-primary/20`}>
-        <Image
+        <img
           src={theme === 'dark' ? '/logo-dark.png' : '/logo.png'}
           alt="Universal Printing Press Logo"
           width={imageSize[size]}
           height={imageSize[size]}
           className="object-contain"
-          priority
-          unoptimized
         />
       </div>
       {showText && (
