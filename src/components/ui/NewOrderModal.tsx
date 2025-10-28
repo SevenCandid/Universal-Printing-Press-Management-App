@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Dialog } from '@headlessui/react'
 import { XMarkIcon } from '@heroicons/react/24/outline'
 import { supabase } from '@/lib/supabaseClient'
@@ -17,7 +17,19 @@ export function NewOrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
     payment_method: 'cash',
   })
   const [loading, setLoading] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const { isOnline, queueOperation } = useOffline()
+
+  // Get current user on mount
+  useEffect(() => {
+    const getCurrentUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        setCurrentUserId(user.id)
+      }
+    }
+    getCurrentUser()
+  }, [])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value })
@@ -39,7 +51,7 @@ export function NewOrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
       payment_method: formData.payment_method,
       payment_status: 'pending',
       order_status: 'pending',
-      created_by: 'Admin',
+      created_by: currentUserId,
     }
 
     try {

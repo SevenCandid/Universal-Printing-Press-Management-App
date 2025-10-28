@@ -3,6 +3,8 @@
 import { useEffect, useRef, createContext, useContext, useState, ReactNode } from 'react'
 import { useSupabase } from '@/components/providers/SupabaseProvider'
 import { RealtimeChannel } from '@supabase/supabase-js'
+import { showServiceWorkerNotification, requestNotificationPermission as requestSWPermission } from '@/lib/serviceWorkerNotifications'
+import { setAppBadge } from '@/lib/badgeApi'
 
 // ====== Notification Types ======
 export type NotificationType = 'order' | 'task' | 'general'
@@ -46,38 +48,39 @@ export default function GlobalNotifier({ children }: { children?: ReactNode }) {
 
   // ====== Request Browser Notification Permission ======
   const requestNotificationPermission = async () => {
-    if (!('Notification' in window)) {
-      console.warn('Browser does not support notifications')
-      return
-    }
-
-    if (Notification.permission === 'granted') {
-      setPermissionGranted(true)
-      return
-    }
-
-    if (Notification.permission !== 'denied') {
-      const permission = await Notification.requestPermission()
-      if (permission === 'granted') {
-        setPermissionGranted(true)
-      }
+    const granted = await requestSWPermission()
+    setPermissionGranted(granted)
+    
+    if (granted) {
+      console.log('✅ Notification permission granted')
     }
   }
 
   // ====== Show Native Notification ======
-  const showNativeNotification = (title: string, body: string, icon?: string) => {
-    if (!permissionGranted || !('Notification' in window)) return
+  const showNativeNotification = async (title: string, body: string, link?: string) => {
+    if (!permissionGranted) return
 
     try {
-      new Notification(title, {
+      // Use service worker notification for better mobile support
+      await showServiceWorkerNotification({
+        title,
         body,
-        icon: icon || '/icons/icon-192x192.png',
+        icon: '/icons/icon-192x192.png',
         badge: '/icons/icon-192x192.png',
         tag: 'upp-notification',
+        vibrate: [200, 100, 200],
+        data: { url: link || '/' },
       })
     } catch (err) {
-      console.error('Native notification error:', err)
+      console.error('Notification error:', err)
     }
+  }
+  
+  // ====== Update App Badge Count ======
+  const updateBadgeCount = (count: number) => {
+    setAppBadge(count).catch((err) => {
+      console.warn('Could not update badge:', err)
+    })
   }
 
   // ====== Add In-App Notification ======
@@ -125,10 +128,16 @@ export default function GlobalNotifier({ children }: { children?: ReactNode }) {
 
       // Show native browser notification only for unread
       if (!newNotification.read) {
-        showNativeNotification(newNotification.title, newNotification.message)
+        showNativeNotification(newNotification.title, newNotification.message, newNotification.link)
       }
 
-      return [newNotification, ...prev].slice(0, 50)
+      const newList = [newNotification, ...prev].slice(0, 50)
+      
+      // Update badge count with unread notifications
+      const unreadCount = newList.filter((n) => !n.read).length
+      updateBadgeCount(unreadCount)
+      
+      return newList
     })
   }
   // 🔔 Notification System END
@@ -164,6 +173,10 @@ export default function GlobalNotifier({ children }: { children?: ReactNode }) {
         }))
         setNotifications(mappedNotifications)
         setLoaded(true)
+        
+        // Update badge with unread count
+        const unreadCount = mappedNotifications.filter((n) => !n.read).length
+        updateBadgeCount(unreadCount)
       }
     } catch (err) {
       console.error('Error loading notifications:', err)
@@ -173,7 +186,12 @@ export default function GlobalNotifier({ children }: { children?: ReactNode }) {
   // ====== Context Methods ======
   const markAsRead = async (id: string) => {
     // Update locally immediately for instant feedback
-    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)))
+    setNotifications((prev) => {
+      const updated = prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+      const unreadCount = updated.filter((n) => !n.read).length
+      updateBadgeCount(unreadCount)
+      return updated
+    })
     
     // Update in database
     if (supabase) {
@@ -190,7 +208,11 @@ export default function GlobalNotifier({ children }: { children?: ReactNode }) {
 
   const markAllAsRead = async () => {
     // Update locally
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
+    setNotifications((prev) => {
+      const updated = prev.map((n) => ({ ...n, read: true }))
+      updateBadgeCount(0) // All read, so badge is 0
+      return updated
+    })
     
     // Update in database
     if (supabase) {
@@ -208,7 +230,12 @@ export default function GlobalNotifier({ children }: { children?: ReactNode }) {
 
   const clearNotification = async (id: string) => {
     // Remove locally
-    setNotifications((prev) => prev.filter((n) => n.id !== id))
+    setNotifications((prev) => {
+      const updated = prev.filter((n) => n.id !== id)
+      const unreadCount = updated.filter((n) => !n.read).length
+      updateBadgeCount(unreadCount)
+      return updated
+    })
     
     // Delete from database
     if (supabase) {

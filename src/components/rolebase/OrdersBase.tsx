@@ -35,6 +35,9 @@ type Order = {
   payment_status?: string
   order_status?: string
   created_by?: string
+  creator_name?: string
+  creator_email?: string
+  creator_role?: string
   created_at?: string
 }
 
@@ -141,7 +144,8 @@ export default function OrdersPage() {
     const from = pageIndex * PAGE_SIZE
     const to = from + PAGE_SIZE - 1
 
-    let query: any = supabase.from('orders').select('*', { count: 'exact' })
+    // Use the orders_with_creator view to get creator info
+    let query: any = supabase.from('orders_with_creator').select('*', { count: 'exact' })
 
     if (search.trim()) {
       const escaped = search.replace(/'/g, "''")
@@ -687,7 +691,22 @@ export default function OrdersPage() {
                       )}
                     </td>
 
-                    <td className="px-4 py-3">{o.created_by || '-'}</td>
+                    {/* Created By - Show creator name or email */}
+                    <td className="px-4 py-3">
+                      {o.creator_name ? (
+                        <div className="flex items-center gap-2">
+                          <UserIcon className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm">{o.creator_name}</span>
+                        </div>
+                      ) : o.creator_email ? (
+                        <div className="flex items-center gap-2">
+                          <UserIcon className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-xs text-muted-foreground">{o.creator_email}</span>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-xs">{o.created_at ? new Date(o.created_at).toLocaleString() : '-'}</td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1 flex-wrap">
