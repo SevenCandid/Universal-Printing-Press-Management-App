@@ -185,7 +185,7 @@ export default function LoginPage() {
       <div className="max-w-md w-full space-y-6 p-8 bg-card border border-border rounded-xl shadow-lg">
         {/* Logo and Header */}
         <div className="flex flex-col items-center space-y-3">
-          <Image src="/assets/logo/UPPLOGO.png" alt="Logo" width={80} height={80} />
+          <Image src="/UPPLOGO.png" alt="Logo" width={80} height={80} priority unoptimized />
           <h2 className="text-2xl font-semibold text-foreground">Welcome Back</h2>
           <p className="text-muted-foreground text-sm">
             Login to access your dashboard

@@ -95,11 +95,12 @@ export default function UpdatePasswordPage() {
         <div className="flex justify-center mb-6">
           <div className="relative w-24 h-24 md:w-32 md:h-32">
             <Image
-              src="/assets/logo/UPPLOGO.png"
+              src="/UPPLOGO.png"
               alt="UPP Logo"
               fill
               className="object-contain"
               priority
+              unoptimized
             />
           </div>
         </div>
