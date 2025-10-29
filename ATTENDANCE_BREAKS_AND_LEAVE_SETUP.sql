@@ -128,22 +128,26 @@ ALTER TABLE public.leave_requests ENABLE ROW LEVEL SECURITY;
 -- ==================
 
 -- Staff can view their own breaks
+DROP POLICY IF EXISTS "Users can view own breaks" ON public.breaks;
 CREATE POLICY "Users can view own breaks"
     ON public.breaks FOR SELECT
     USING (auth.uid() = user_id);
 
 -- Staff can insert their own breaks
+DROP POLICY IF EXISTS "Users can create own breaks" ON public.breaks;
 CREATE POLICY "Users can create own breaks"
     ON public.breaks FOR INSERT
     WITH CHECK (auth.uid() = user_id);
 
 -- Staff can update their own breaks (only to end them)
+DROP POLICY IF EXISTS "Users can update own breaks" ON public.breaks;
 CREATE POLICY "Users can update own breaks"
     ON public.breaks FOR UPDATE
     USING (auth.uid() = user_id)
     WITH CHECK (auth.uid() = user_id);
 
 -- Managers/CEO can view all breaks
+DROP POLICY IF EXISTS "Managers can view all breaks" ON public.breaks;
 CREATE POLICY "Managers can view all breaks"
     ON public.breaks FOR SELECT
     USING (
@@ -159,22 +163,26 @@ CREATE POLICY "Managers can view all breaks"
 -- ==================
 
 -- Staff can view their own leave requests
+DROP POLICY IF EXISTS "Users can view own leave requests" ON public.leave_requests;
 CREATE POLICY "Users can view own leave requests"
     ON public.leave_requests FOR SELECT
     USING (auth.uid() = user_id);
 
 -- Staff can create their own leave requests
+DROP POLICY IF EXISTS "Users can create own leave requests" ON public.leave_requests;
 CREATE POLICY "Users can create own leave requests"
     ON public.leave_requests FOR INSERT
     WITH CHECK (auth.uid() = user_id);
 
 -- Staff can update their own pending requests (cancel)
+DROP POLICY IF EXISTS "Users can update own pending leave requests" ON public.leave_requests;
 CREATE POLICY "Users can update own pending leave requests"
     ON public.leave_requests FOR UPDATE
     USING (auth.uid() = user_id AND status = 'pending')
     WITH CHECK (auth.uid() = user_id);
 
 -- CEO/Managers can view all leave requests
+DROP POLICY IF EXISTS "Managers can view all leave requests" ON public.leave_requests;
 CREATE POLICY "Managers can view all leave requests"
     ON public.leave_requests FOR SELECT
     USING (
@@ -186,6 +194,7 @@ CREATE POLICY "Managers can view all leave requests"
     );
 
 -- CEO/Managers can approve/reject leave requests
+DROP POLICY IF EXISTS "Managers can manage leave requests" ON public.leave_requests;
 CREATE POLICY "Managers can manage leave requests"
     ON public.leave_requests FOR UPDATE
     USING (
