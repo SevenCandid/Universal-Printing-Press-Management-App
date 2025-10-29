@@ -70,8 +70,8 @@ export function showBrowserNotification(
       data: options?.data || {},
       requireInteraction: options?.requireInteraction || false,
       silent: options?.silent || false,
-      vibrate: [200, 100, 200], // Vibration pattern for mobile
-    })
+      // Note: vibrate is supported by some browsers but not in TypeScript types
+    } as NotificationOptions)
 
     // Handle notification click
     notification.onclick = (event) => {
