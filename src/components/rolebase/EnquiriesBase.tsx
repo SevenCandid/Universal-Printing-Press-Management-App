@@ -18,6 +18,7 @@ export default function EnquiriesBase() {
   const [loading, setLoading] = useState(true)
   const [userRole, setUserRole] = useState<string>('')
   const [periodFilter, setPeriodFilter] = useState<string>('all')
+  const [convertingId, setConvertingId] = useState<number | null>(null)
 
   const [newEnquiry, setNewEnquiry] = useState({
     client_name: '',
@@ -105,18 +106,83 @@ export default function EnquiriesBase() {
     }
   }
 
-  // ✅ Convert to order
+  // ✅ Convert to order - Actually creates an order!
   const markAsConverted = async (id: number) => {
-    const { error } = await supabase
-      .from('enquiries')
-      .update({ converted_to_order: true, status: 'converted' })
-      .eq('id', id)
+    setConvertingId(id) // Set loading state
+    
+    try {
+      // Get the enquiry details
+      const { data: enquiry, error: fetchError } = await supabase
+        .from('enquiries')
+        .select('*')
+        .eq('id', id)
+        .single()
 
-    if (error) {
-      toast.error('Failed to mark as converted.')
-    } else {
-      toast.success('Marked as converted!')
+      if (fetchError || !enquiry) {
+        toast.error('Failed to fetch enquiry details.')
+        setConvertingId(null)
+        return
+      }
+
+      // Get current user ID
+      const { data: userData } = await supabase.auth.getUser()
+      const userId = userData?.user?.id
+
+      // Generate order number
+      const orderNumber = 'ORD-' + Math.floor(100000 + Math.random() * 900000)
+
+      // Create the order
+      const orderData = {
+        order_number: orderNumber,
+        customer_name: enquiry.client_name,
+        customer_phone: enquiry.contact_number || '',
+        item_description: enquiry.message || 'Converted from enquiry',
+        quantity: 1,
+        total_amount: 0, // Default - can be updated later
+        payment_method: 'cash',
+        payment_status: 'pending',
+        order_status: 'pending',
+        created_by: userId,
+      }
+
+      const { data: newOrder, error: orderError } = await supabase
+        .from('orders')
+        .insert([orderData])
+        .select()
+        .single()
+
+      if (orderError) {
+        console.error('Order creation error:', orderError)
+        toast.error('Failed to create order: ' + orderError.message)
+        setConvertingId(null)
+        return
+      }
+
+      // Now mark the enquiry as converted
+      const { error: updateError } = await supabase
+        .from('enquiries')
+        .update({ 
+          converted_to_order: true, 
+          status: 'converted'
+        })
+        .eq('id', id)
+
+      if (updateError) {
+        toast.error('Order created but failed to update enquiry status.')
+        setConvertingId(null)
+        return
+      }
+
+      toast.success(
+        `✅ Enquiry converted to Order ${orderNumber}!\n\nYou can find it in Orders page.`,
+        { duration: 5000 }
+      )
       fetchEnquiries()
+    } catch (error: any) {
+      console.error('Conversion error:', error)
+      toast.error('Failed to convert enquiry to order.')
+    } finally {
+      setConvertingId(null)
     }
   }
 
@@ -260,9 +326,14 @@ export default function EnquiriesBase() {
                   )}
 
                   {!enquiry.converted_to_order ? (
-                    <Button variant="default" size="sm" onClick={() => markAsConverted(enquiry.id)}>
+                    <Button 
+                      variant="default" 
+                      size="sm" 
+                      onClick={() => markAsConverted(enquiry.id)}
+                      disabled={convertingId === enquiry.id}
+                    >
                       <ArrowRightCircle className="w-4 h-4 mr-1" />
-                      Convert
+                      {convertingId === enquiry.id ? 'Converting...' : 'Convert to Order'}
                     </Button>
                   ) : (
                     <span className="text-green-600 font-semibold">✅ Converted</span>
