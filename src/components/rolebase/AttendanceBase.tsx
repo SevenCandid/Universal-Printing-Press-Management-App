@@ -12,10 +12,13 @@ import {
   CalendarIcon,
   ArrowDownTrayIcon,
   FunnelIcon,
-  UserGroupIcon
+  UserGroupIcon,
+  CalendarDaysIcon
 } from '@heroicons/react/24/outline'
 import jsPDF from 'jspdf'
 import 'jspdf-autotable'
+import BreakTracker from '@/components/attendance/BreakTracker'
+import LeaveRequestModal from '@/components/attendance/LeaveRequestModal'
 
 // 📍 Office coordinates - Sampa
 // Reference: https://maps.app.goo.gl/6iTYHQdTsbey9jkm8
@@ -82,6 +85,9 @@ export default function AttendanceBase({ role }: { role: string }) {
   const [customStartDate, setCustomStartDate] = useState<string>('')
   const [customEndDate, setCustomEndDate] = useState<string>('')
   const [showFilters, setShowFilters] = useState(false)
+  
+  // Leave request modal
+  const [showLeaveModal, setShowLeaveModal] = useState(false)
 
   // Helper: Check if user can view all staff
   const canViewAllStaff = () => role === 'ceo' || role === 'manager' || role === 'executive_assistant'
@@ -588,9 +594,18 @@ export default function AttendanceBase({ role }: { role: string }) {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-foreground">Smart Attendance</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">Track your work hours with location verification</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Track your work hours, breaks, and leave requests</p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            onClick={() => setShowLeaveModal(true)}
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-1.5 bg-primary/5 border-primary/30 hover:bg-primary/10"
+          >
+            <CalendarDaysIcon className="h-3.5 w-3.5" />
+            <span className="text-xs">Leave Request</span>
+          </Button>
           <Button
             onClick={() => setShowFilters(!showFilters)}
             variant="outline"
@@ -702,17 +717,19 @@ export default function AttendanceBase({ role }: { role: string }) {
         </div>
       )}
 
-      {/* Today's Status Card */}
-      <div className="bg-card border border-border rounded-lg p-4">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-1.5">
-            <CalendarIcon className="h-4 w-4 text-primary" />
-            <h2 className="text-base font-semibold">Today's Attendance</h2>
+      {/* Today's Attendance and Breaks Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Today's Status Card */}
+        <div className="bg-card border border-border rounded-lg p-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-1.5">
+              <CalendarIcon className="h-4 w-4 text-primary" />
+              <h2 className="text-base font-semibold">Daily Attendance</h2>
+            </div>
+            <span className="text-xs text-muted-foreground">
+              {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+            </span>
           </div>
-          <span className="text-xs text-muted-foreground">
-            {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-          </span>
-        </div>
 
         {todayRecord ? (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
@@ -763,18 +780,26 @@ export default function AttendanceBase({ role }: { role: string }) {
           </Button>
         </div>
 
-        <div className="mt-3 flex items-start space-x-1.5 text-xs text-muted-foreground">
-          <MapPinIcon className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
-          <p className="leading-relaxed">
-            {DEV_MODE ? (
-              <span className="text-orange-500 font-medium">
-                🔧 DEV MODE: Location verification disabled
-              </span>
-            ) : (
-              <>Within {OFFICE_LOCATION.radius}m of office required</>
-            )}
-          </p>
+          <div className="mt-3 flex items-start space-x-1.5 text-xs text-muted-foreground">
+            <MapPinIcon className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+            <p className="leading-relaxed">
+              {DEV_MODE ? (
+                <span className="text-orange-500 font-medium">
+                  🔧 DEV MODE: Location verification disabled
+                </span>
+              ) : (
+                <>Within {OFFICE_LOCATION.radius}m of office required</>
+              )}
+            </p>
+          </div>
         </div>
+
+        {/* Break Tracker */}
+        <BreakTracker 
+          attendanceId={todayRecord?.id || null}
+          userId={session?.user?.id || ''}
+          isCheckedIn={todayRecord?.status === 'checked_in'}
+        />
       </div>
 
       {/* Attendance History */}
@@ -872,6 +897,13 @@ export default function AttendanceBase({ role }: { role: string }) {
           </div>
         )}
       </div>
+
+      {/* Leave Request Modal */}
+      <LeaveRequestModal 
+        isOpen={showLeaveModal}
+        onClose={() => setShowLeaveModal(false)}
+        role={role}
+      />
     </div>
   )
 }
