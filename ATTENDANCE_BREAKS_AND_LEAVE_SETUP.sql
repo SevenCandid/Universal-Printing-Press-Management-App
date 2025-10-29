@@ -278,25 +278,34 @@ VALUES
 -- =====================================================
 -- 9. NOTIFICATIONS (Optional Enhancement)
 -- =====================================================
+-- NOTE: Notification triggers are commented out by default
+-- Uncomment and update the 'type' values to match your notifications table constraints
+-- Check your notifications table for allowed types: SELECT * FROM pg_constraint WHERE conname = 'notifications_type_check';
 
+/*
 -- Function to notify CEO of new leave requests
 CREATE OR REPLACE FUNCTION notify_leave_request()
 RETURNS TRIGGER AS $$
 BEGIN
     -- Insert notification for CEO/Managers
-    -- Note: Using 'read' column (not 'is_read')
+    -- IMPORTANT: Update 'type' value to match your notifications_type_check constraint
     INSERT INTO public.notifications (user_id, title, message, link, type, read)
     SELECT 
         id,
         'New Leave Request',
         (SELECT name FROM profiles WHERE id = NEW.user_id) || ' has requested ' || NEW.request_type || ' from ' || NEW.start_date || ' to ' || NEW.end_date,
         '/ceo/attendance',
-        'leave_request',
+        'info',  -- Change this to match your allowed notification types
         false
     FROM profiles
     WHERE role IN ('ceo', 'manager', 'executive_assistant');
     
     RETURN NEW;
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Log error but don't fail the leave request creation
+        RAISE WARNING 'Failed to create notification: %', SQLERRM;
+        RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -311,19 +320,24 @@ CREATE OR REPLACE FUNCTION notify_leave_decision()
 RETURNS TRIGGER AS $$
 BEGIN
     IF NEW.status != OLD.status AND NEW.status IN ('approved', 'rejected') THEN
-        -- Note: Using 'read' column (not 'is_read')
+        -- IMPORTANT: Update 'type' value to match your notifications_type_check constraint
         INSERT INTO public.notifications (user_id, title, message, link, type, read)
         VALUES (
             NEW.user_id,
             'Leave Request ' || UPPER(NEW.status),
             'Your ' || NEW.request_type || ' request from ' || NEW.start_date || ' to ' || NEW.end_date || ' has been ' || NEW.status,
             '/staff/attendance',
-            'leave_decision',
+            'info',  -- Change this to match your allowed notification types
             false
         );
     END IF;
     
     RETURN NEW;
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Log error but don't fail the update
+        RAISE WARNING 'Failed to create notification: %', SQLERRM;
+        RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -332,6 +346,13 @@ CREATE TRIGGER leave_decision_notification
     AFTER UPDATE ON public.leave_requests
     FOR EACH ROW
     EXECUTE FUNCTION notify_leave_decision();
+*/
+
+-- To enable notifications:
+-- 1. Uncomment the above code
+-- 2. Check allowed notification types with: SELECT * FROM pg_constraint WHERE conname LIKE '%notification%type%';
+-- 3. Update the 'type' values ('info' above) to match your allowed types
+-- 4. Run this script again
 
 -- =====================================================
 -- SETUP COMPLETE! ✅
