@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#3b82f6">
+    <title>You're Offline - Universal Printing Press</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: #1f2937;
+        }
+
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            max-width: 480px;
+            width: 100%;
+            padding: 40px 24px;
+            text-align: center;
+        }
+
+        .icon-container {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 24px;
+            background: linear-gradient(135deg, #ef4444 0%, #f97316 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.7;
+            }
+        }
+
+        .icon {
+            width: 40px;
+            height: 40px;
+            stroke: white;
+            stroke-width: 2;
+            fill: none;
+        }
+
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: #111827;
+        }
+
+        .description {
+            color: #6b7280;
+            font-size: 16px;
+            line-height: 1.5;
+            margin-bottom: 32px;
+        }
+
+        .info-box {
+            background: #eff6ff;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+            text-align: left;
+        }
+
+        .info-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #1e40af;
+            margin-bottom: 12px;
+        }
+
+        .info-list {
+            list-style: none;
+            color: #1e40af;
+            font-size: 14px;
+        }
+
+        .info-list li {
+            margin-bottom: 8px;
+            padding-left: 20px;
+            position: relative;
+        }
+
+        .info-list li:before {
+            content: "•";
+            position: absolute;
+            left: 0;
+            font-weight: bold;
+        }
+
+        .buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 14px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .btn-primary:hover, .btn-primary:active {
+            background: #2563eb;
+        }
+
+        .btn-secondary {
+            background: #e5e7eb;
+            color: #111827;
+        }
+
+        .btn-secondary:hover, .btn-secondary:active {
+            background: #d1d5db;
+        }
+
+        .btn-icon {
+            width: 16px;
+            height: 16px;
+            stroke: currentColor;
+            stroke-width: 2;
+            fill: none;
+        }
+
+        .status {
+            margin-top: 24px;
+            padding-top: 24px;
+            border-top: 1px solid #e5e7eb;
+            color: #6b7280;
+            font-size: 13px;
+        }
+
+        /* Floating Offline Indicator */
+        .offline-badge {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 20px;
+            background: linear-gradient(135deg, #ef4444 0%, #f97316 100%);
+            color: white;
+            border-radius: 50px;
+            box-shadow: 0 10px 25px rgba(239, 68, 68, 0.4);
+            font-size: 14px;
+            font-weight: 600;
+            animation: pulse-badge 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .offline-badge:hover {
+            transform: scale(1.05);
+        }
+
+        .offline-badge.online {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            box-shadow: 0 10px 25px rgba(16, 185, 129, 0.4);
+            animation: none;
+        }
+
+        @keyframes pulse-badge {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.7;
+            }
+        }
+
+        .badge-icon {
+            width: 16px;
+            height: 16px;
+            stroke: currentColor;
+            stroke-width: 2.5;
+            fill: none;
+        }
+
+        .online-status {
+            display: none;
+        }
+
+        .online .icon-container {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            animation: none;
+        }
+
+        .online .offline-status {
+            display: none;
+        }
+
+        .online .online-status {
+            display: block;
+        }
+
+        .online h1 {
+            color: #059669;
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 32px 20px;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
+
+            .buttons {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="container">
+        <div class="icon-container">
+            <svg class="icon" id="icon" viewBox="0 0 24 24">
+                <!-- Cloud Off Icon (Offline) -->
+                <path id="offline-icon" stroke-linecap="round" stroke-linejoin="round" d="M3 3l18 18M10.5 10.677c-.75.447-1.262 1.169-1.405 2.019A3.75 3.75 0 003 15.75c0 .414.336.75.75.75h9.575m1.363-.124A4.472 4.472 0 0118 12.75a4.5 4.5 0 00-5.4-4.408m-.838 4.534A2.25 2.25 0 109 18.75h10.875"></path>
+                <!-- Wifi Icon (Online) -->
+                <path id="online-icon" style="display:none;" stroke-linecap="round" stroke-linejoin="round" d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 011.06 0z"></path>
+            </svg>
+        </div>
+
+        <h1 id="title">You're Offline</h1>
+        <p class="description" id="description">
+            No internet connection detected. Don't worry, you can still access your cached data.
+        </p>
+
+        <div class="info-box">
+            <div class="info-title">What you can do offline:</div>
+            <ul class="info-list">
+                <li>View recently accessed orders and invoices</li>
+                <li>Check expense records</li>
+                <li>Browse product catalog</li>
+                <li>Read handbook and documentation</li>
+                <li>Create new entries (will sync when online)</li>
+            </ul>
+        </div>
+
+        <div class="buttons">
+            <button class="btn btn-primary" onclick="retryConnection()">
+                <svg class="btn-icon" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"></path>
+                </svg>
+                Retry
+            </button>
+            <button class="btn btn-secondary" onclick="goHome()">
+                <svg class="btn-icon" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"></path>
+                </svg>
+                Go Home
+            </button>
+        </div>
+
+        <div class="status">
+            <div class="offline-status">
+                💾 Your changes are being saved locally and will automatically sync when you're back online.
+            </div>
+            <div class="online-status">
+                🎉 Connection restored! Redirecting you back...
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Offline Indicator Badge -->
+    <div class="offline-badge" id="offlineBadge" onclick="scrollToTop()">
+        <svg class="badge-icon" id="badgeIcon" viewBox="0 0 24 24">
+            <path id="badgeIconPath" stroke-linecap="round" stroke-linejoin="round" d="M3 3l18 18M10.5 10.677c-.75.447-1.262 1.169-1.405 2.019A3.75 3.75 0 003 15.75c0 .414.336.75.75.75h9.575m1.363-.124A4.472 4.472 0 0118 12.75a4.5 4.5 0 00-5.4-4.408m-.838 4.534A2.25 2.25 0 109 18.75h10.875"></path>
+        </svg>
+        <span id="badgeText">Offline Mode</span>
+    </div>
+
+    <script>
+        // Scroll to top when badge clicked
+        function scrollToTop() {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // Check online status
+        function updateOnlineStatus() {
+            const container = document.getElementById('container');
+            const title = document.getElementById('title');
+            const description = document.getElementById('description');
+            const offlineIcon = document.getElementById('offline-icon');
+            const onlineIcon = document.getElementById('online-icon');
+            const badge = document.getElementById('offlineBadge');
+            const badgeText = document.getElementById('badgeText');
+            const badgeIconPath = document.getElementById('badgeIconPath');
+            
+            if (navigator.onLine) {
+                // Update main container
+                container.classList.add('online');
+                title.textContent = "🎉 You're Back Online!";
+                description.textContent = "Connection restored! Redirecting you back...";
+                offlineIcon.style.display = 'none';
+                onlineIcon.style.display = 'block';
+                
+                // Update floating badge
+                badge.classList.add('online');
+                badgeText.textContent = "Online";
+                badgeIconPath.setAttribute('d', 'M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 011.06 0z');
+                
+                // Auto-redirect after 1 second
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 1000);
+            } else {
+                // Update main container
+                container.classList.remove('online');
+                title.textContent = "You're Offline";
+                description.textContent = "No internet connection detected. Don't worry, you can still access your cached data.";
+                offlineIcon.style.display = 'block';
+                onlineIcon.style.display = 'none';
+                
+                // Update floating badge
+                badge.classList.remove('online');
+                badgeText.textContent = "Offline Mode";
+                badgeIconPath.setAttribute('d', 'M3 3l18 18M10.5 10.677c-.75.447-1.262 1.169-1.405 2.019A3.75 3.75 0 003 15.75c0 .414.336.75.75.75h9.575m1.363-.124A4.472 4.472 0 0118 12.75a4.5 4.5 0 00-5.4-4.408m-.838 4.534A2.25 2.25 0 109 18.75h10.875');
+            }
+        }
+
+        // Retry connection
+        function retryConnection() {
+            if (navigator.onLine) {
+                window.location.reload();
+            } else {
+                // Try to reload anyway
+                window.location.reload();
+            }
+        }
+
+        // Go home
+        function goHome() {
+            try {
+                if (window.history.length > 1) {
+                    window.history.back();
+                } else {
+                    window.location.href = '/';
+                }
+            } catch (e) {
+                window.location.href = '/';
+            }
+        }
+
+        // Listen for online/offline events
+        window.addEventListener('online', updateOnlineStatus);
+        window.addEventListener('offline', updateOnlineStatus);
+
+        // Check status on load
+        updateOnlineStatus();
+
+        // Log for debugging
+        console.log('[OfflinePage] Standalone offline page loaded');
+        console.log('[OfflinePage] Online status:', navigator.onLine);
+        console.log('[OfflinePage] Floating offline badge active');
+
+        // Check status every 2 seconds
+        setInterval(updateOnlineStatus, 2000);
+    </script>
+</body>
+</html>
+

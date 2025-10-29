@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notification Test - UPPress</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .card {
+            background: white;
+            padding: 24px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+            margin-top: 0;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 8px 8px 8px 0;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 12px;
+            border-radius: 6px;
+            margin: 12px 0;
+            font-size: 14px;
+        }
+        .success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #6ee7b7;
+        }
+        .error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fca5a5;
+        }
+        .warning {
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fcd34d;
+        }
+        .info {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #93c5fd;
+        }
+        code {
+            background: #f3f4f6;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        pre {
+            background: #1f2937;
+            color: #f9fafb;
+            padding: 16px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>🔔 Notification Test</h1>
+        <p>Use this page to test if browser notifications work on your device.</p>
+        
+        <div id="status"></div>
+        
+        <div>
+            <button onclick="checkStatus()">1. Check Status</button>
+            <button onclick="requestPermission()">2. Request Permission</button>
+            <button onclick="testNotification()" id="testBtn" disabled>3. Test Notification</button>
+        </div>
+        
+        <div id="output"></div>
+    </div>
+
+    <div class="card">
+        <h2>Debug Info</h2>
+        <pre id="debug"></pre>
+    </div>
+
+    <script>
+        function updateStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.className = `status ${type}`;
+            status.innerHTML = message;
+        }
+
+        function updateDebug(info) {
+            document.getElementById('debug').textContent = JSON.stringify(info, null, 2);
+        }
+
+        function checkStatus() {
+            const info = {
+                supported: 'Notification' in window,
+                permission: Notification?.permission || 'not-supported',
+                userAgent: navigator.userAgent,
+                platform: navigator.platform,
+                onLine: navigator.onLine,
+            };
+
+            updateDebug(info);
+
+            if (!info.supported) {
+                updateStatus('❌ Notifications NOT supported on this browser', 'error');
+                return;
+            }
+
+            if (info.permission === 'granted') {
+                updateStatus('✅ Notifications are enabled and ready!', 'success');
+                document.getElementById('testBtn').disabled = false;
+            } else if (info.permission === 'denied') {
+                updateStatus('❌ Notifications are blocked. Click the lock icon in your address bar to enable them.', 'error');
+            } else {
+                updateStatus('⚠️ Notification permission not granted yet. Click "Request Permission" below.', 'warning');
+            }
+        }
+
+        async function requestPermission() {
+            if (!('Notification' in window)) {
+                updateStatus('❌ Notifications not supported', 'error');
+                return;
+            }
+
+            try {
+                const permission = await Notification.requestPermission();
+                
+                if (permission === 'granted') {
+                    updateStatus('✅ Permission granted! Click "Test Notification" to try it.', 'success');
+                    document.getElementById('testBtn').disabled = false;
+                } else if (permission === 'denied') {
+                    updateStatus('❌ Permission denied. Check browser settings.', 'error');
+                } else {
+                    updateStatus('⚠️ Permission dismissed. Try again.', 'warning');
+                }
+
+                checkStatus();
+            } catch (error) {
+                updateStatus(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        function testNotification() {
+            if (Notification.permission !== 'granted') {
+                updateStatus('❌ Permission not granted. Click "Request Permission" first.', 'error');
+                return;
+            }
+
+            try {
+                const notification = new Notification('🎉 Success!', {
+                    body: 'Browser notifications are working! You should see this popup.',
+                    icon: '/icon-192x192.png',
+                    badge: '/icon-192x192.png',
+                    vibrate: [200, 100, 200],
+                    tag: 'test-notification',
+                    requireInteraction: false,
+                });
+
+                notification.onclick = () => {
+                    console.log('Notification clicked!');
+                    notification.close();
+                    updateStatus('✅ Notification clicked! Everything works!', 'success');
+                };
+
+                updateStatus('✅ Test notification sent! Check if you see a popup.', 'success');
+                
+                // Auto-close after 5 seconds
+                setTimeout(() => notification.close(), 5000);
+            } catch (error) {
+                updateStatus(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        // Auto-check on load
+        window.onload = () => {
+            checkStatus();
+        };
+    </script>
+</body>
+</html>
+
