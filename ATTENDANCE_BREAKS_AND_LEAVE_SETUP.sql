@@ -74,6 +74,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS breaks_updated_at ON public.breaks;
 CREATE TRIGGER breaks_updated_at
     BEFORE UPDATE ON public.breaks
     FOR EACH ROW
@@ -88,6 +89,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS leave_requests_updated_at ON public.leave_requests;
 CREATE TRIGGER leave_requests_updated_at
     BEFORE UPDATE ON public.leave_requests
     FOR EACH ROW
@@ -107,6 +109,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS calculate_break_duration_trigger ON public.breaks;
 CREATE TRIGGER calculate_break_duration_trigger
     BEFORE INSERT OR UPDATE ON public.breaks
     FOR EACH ROW
@@ -272,7 +275,8 @@ CREATE OR REPLACE FUNCTION notify_leave_request()
 RETURNS TRIGGER AS $$
 BEGIN
     -- Insert notification for CEO/Managers
-    INSERT INTO public.notifications (user_id, title, message, link, type, is_read)
+    -- Note: Using 'read' column (not 'is_read')
+    INSERT INTO public.notifications (user_id, title, message, link, type, read)
     SELECT 
         id,
         'New Leave Request',
@@ -287,6 +291,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS leave_request_notification ON public.leave_requests;
 CREATE TRIGGER leave_request_notification
     AFTER INSERT ON public.leave_requests
     FOR EACH ROW
@@ -297,7 +302,8 @@ CREATE OR REPLACE FUNCTION notify_leave_decision()
 RETURNS TRIGGER AS $$
 BEGIN
     IF NEW.status != OLD.status AND NEW.status IN ('approved', 'rejected') THEN
-        INSERT INTO public.notifications (user_id, title, message, link, type, is_read)
+        -- Note: Using 'read' column (not 'is_read')
+        INSERT INTO public.notifications (user_id, title, message, link, type, read)
         VALUES (
             NEW.user_id,
             'Leave Request ' || UPPER(NEW.status),
@@ -312,6 +318,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS leave_decision_notification ON public.leave_requests;
 CREATE TRIGGER leave_decision_notification
     AFTER UPDATE ON public.leave_requests
     FOR EACH ROW

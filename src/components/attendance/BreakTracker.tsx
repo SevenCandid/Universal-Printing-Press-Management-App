@@ -76,7 +76,15 @@ export default function BreakTracker({ attendanceId, userId, isCheckedIn }: Brea
         .lte('created_at', `${today}T23:59:59`)
         .order('break_start', { ascending: false })
 
-      if (error) throw error
+      if (error) {
+        // Silently fail if table doesn't exist (setup not done)
+        if (error.code === '42P01') {
+          console.warn('Breaks table not found. Run ATTENDANCE_BREAKS_AND_LEAVE_SETUP.sql')
+          setTodayBreaks([])
+          return
+        }
+        throw error
+      }
 
       setTodayBreaks(data || [])
       
@@ -107,14 +115,32 @@ export default function BreakTracker({ attendanceId, userId, isCheckedIn }: Brea
         .select()
         .single()
 
-      if (error) throw error
+      if (error) {
+        console.error('Start break error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+        })
+        
+        // User-friendly error messages
+        if (error.code === '42P01') {
+          throw new Error('Breaks table not found. Please run ATTENDANCE_BREAKS_AND_LEAVE_SETUP.sql in Supabase.')
+        } else if (error.code === '42501') {
+          throw new Error('Permission denied. Please check database policies.')
+        } else if (error.code === '23503') {
+          throw new Error('Invalid attendance ID. Please check in first.')
+        } else {
+          throw new Error(error.message || 'Failed to start break')
+        }
+      }
 
       setActiveBreak(data)
       toast.success('☕ Break started')
       fetchBreaks()
     } catch (err: any) {
       console.error('Start break error:', err)
-      toast.error(err.message || 'Failed to start break')
+      toast.error(err.message || 'Failed to start break. Please ensure the database is set up correctly.')
     } finally {
       setLoading(false)
     }
@@ -132,7 +158,15 @@ export default function BreakTracker({ attendanceId, userId, isCheckedIn }: Brea
         })
         .eq('id', activeBreak.id)
 
-      if (error) throw error
+      if (error) {
+        console.error('End break error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+        })
+        throw new Error(error.message || 'Failed to end break')
+      }
 
       setActiveBreak(null)
       toast.success('✅ Break ended')

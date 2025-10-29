@@ -72,7 +72,15 @@ export default function LeaveRequestModal({ isOpen, onClose, role }: LeaveReques
         .eq('user_id', session.user.id)
         .order('created_at', { ascending: false })
 
-      if (error) throw error
+      if (error) {
+        // Silently fail if table doesn't exist (setup not done)
+        if (error.code === '42P01') {
+          console.warn('Leave requests table not found. Run ATTENDANCE_BREAKS_AND_LEAVE_SETUP.sql')
+          setMyRequests([])
+          return
+        }
+        throw error
+      }
       setMyRequests(data || [])
     } catch (err) {
       console.error('Fetch my requests error:', err)
@@ -89,7 +97,15 @@ export default function LeaveRequestModal({ isOpen, onClose, role }: LeaveReques
         .eq('status', 'pending')
         .order('created_at', { ascending: true})
 
-      if (error) throw error
+      if (error) {
+        // Silently fail if view doesn't exist (setup not done)
+        if (error.code === '42P01') {
+          console.warn('Leave requests view not found. Run ATTENDANCE_BREAKS_AND_LEAVE_SETUP.sql')
+          setPendingRequests([])
+          return
+        }
+        throw error
+      }
       setPendingRequests(data || [])
     } catch (err) {
       console.error('Fetch pending requests error:', err)
@@ -99,7 +115,10 @@ export default function LeaveRequestModal({ isOpen, onClose, role }: LeaveReques
   const handleSubmitRequest = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!supabase || !session?.user) return
+    if (!supabase || !session?.user) {
+      toast.error('Please sign in to submit a request')
+      return
+    }
 
     if (!startDate || !endDate || !reason.trim()) {
       toast.error('Please fill in all fields')
@@ -124,7 +143,25 @@ export default function LeaveRequestModal({ isOpen, onClose, role }: LeaveReques
           status: 'pending'
         }])
 
-      if (error) throw error
+      if (error) {
+        console.error('Leave request error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+        })
+        
+        // User-friendly error messages
+        if (error.code === '42P01') {
+          throw new Error('Leave requests table not found. Please run ATTENDANCE_BREAKS_AND_LEAVE_SETUP.sql in Supabase.')
+        } else if (error.code === '42501') {
+          throw new Error('Permission denied. Please check database policies.')
+        } else if (error.message?.includes('violates check constraint')) {
+          throw new Error('Invalid request type or date range.')
+        } else {
+          throw new Error(error.message || 'Failed to submit leave request')
+        }
+      }
 
       toast.success('✅ Leave request submitted successfully')
       
@@ -144,7 +181,7 @@ export default function LeaveRequestModal({ isOpen, onClose, role }: LeaveReques
       setActiveTab('history')
     } catch (err: any) {
       console.error('Submit request error:', err)
-      toast.error(err.message || 'Failed to submit request')
+      toast.error(err.message || 'Failed to submit request. Please ensure the database is set up correctly.')
     } finally {
       setLoading(false)
     }
