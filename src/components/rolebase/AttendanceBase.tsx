@@ -16,7 +16,7 @@ import {
   CalendarDaysIcon
 } from '@heroicons/react/24/outline'
 import jsPDF from 'jspdf'
-import 'jspdf-autotable'
+import autoTable from 'jspdf-autotable'
 import BreakTracker from '@/components/attendance/BreakTracker'
 import LeaveRequestModal from '@/components/attendance/LeaveRequestModal'
 
@@ -352,7 +352,7 @@ export default function AttendanceBase({ role }: { role: string }) {
       ])
 
       // Generate table
-      ;(doc as any).autoTable({
+      autoTable(doc, {
         head: [['Date', 'Staff Name', 'Check-In', 'Check-Out', 'Work Hours', 'Status']],
         body: tableData,
         startY: selectedStaff && selectedStaff !== 'all' ? 44 : 38,
