@@ -21,15 +21,16 @@ import BreakTracker from '@/components/attendance/BreakTracker'
 import LeaveRequestModal from '@/components/attendance/LeaveRequestModal'
 
 // 📍 Office coordinates - Sampa
-// Reference: https://maps.app.goo.gl/6iTYHQdTsbey9jkm8
+// Reference: https://maps.app.goo.gl/8jiRTLWJu2gCpKew7
 const OFFICE_LOCATION = {
-  latitude: 7.952673,  // Sampa office location
-  longitude: -2.698856, // Sampa office location
-  radius: 500, // meters allowed from office (500m = ~5 minute walk)
+  latitude: 7.952755,  // Sampa office location (updated)
+  longitude: -2.698595, // Sampa office location (updated)
+  radius: 300, // meters allowed from office (300m = ~3 minute walk, accounts for GPS accuracy)
+  maxAcceptableGPSAccuracy: 500, // meters - reject if GPS accuracy is worse than this
 }
 
 // 🔧 Development mode: Set to true to bypass location check for testing
-const DEV_MODE = true // Temporarily enabled for debugging coordinates
+const DEV_MODE = false // PRODUCTION MODE - GPS verification ENABLED with smart accuracy checks
 
 // Utility: calculate distance between two coordinates (Haversine formula)
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -57,6 +58,10 @@ type AttendanceRecord = {
   longitude: number
   status: string
   created_at: string
+  distance_from_office?: number
+  gps_accuracy?: number
+  checkout_distance?: number
+  checkout_gps_accuracy?: number
   profiles?: {
     name?: string
     email?: string
@@ -391,8 +396,10 @@ export default function AttendanceBase({ role }: { role: string }) {
     }
 
     setCheckingIn(true)
+    toast.loading('📍 Verifying your location...', { id: 'location-check' })
 
     if (!navigator.geolocation) {
+      toast.dismiss('location-check')
       toast.error('Geolocation is not supported by your browser')
       setCheckingIn(false)
       return
@@ -403,7 +410,14 @@ export default function AttendanceBase({ role }: { role: string }) {
         const { latitude, longitude } = pos.coords
         
         // 🔍 Debug logging
-        console.log('📍 Your Location:', { latitude, longitude })
+        console.log('📍 Your Location:', { 
+          latitude, 
+          longitude,
+          accuracy: pos.coords.accuracy,
+          altitude: pos.coords.altitude,
+          heading: pos.coords.heading,
+          speed: pos.coords.speed
+        })
         console.log('🏢 Office Location:', OFFICE_LOCATION)
         
         const distance = getDistance(
@@ -414,21 +428,66 @@ export default function AttendanceBase({ role }: { role: string }) {
         )
         
         console.log('📏 Calculated Distance:', Math.round(distance), 'meters')
-
-        // Location verification (bypassed in DEV_MODE)
-        if (!DEV_MODE && distance > OFFICE_LOCATION.radius) {
+        console.log('🎯 GPS Accuracy:', Math.round(pos.coords.accuracy), 'meters')
+        
+        // ⚠️ Check GPS accuracy first - reject if too poor
+        if (pos.coords.accuracy > OFFICE_LOCATION.maxAcceptableGPSAccuracy) {
+          toast.dismiss('location-check')
           setCheckingIn(false)
-          toast.error(`You must be within ${OFFICE_LOCATION.radius}m of the office to check in. Current distance: ${Math.round(distance)}m`)
-          console.error('❌ Check-in failed: Too far from office')
+          toast.error(
+            `📡 GPS signal too weak!\n\nYour GPS accuracy: ±${Math.round(pos.coords.accuracy)}m\nRequired: Better than ±${OFFICE_LOCATION.maxAcceptableGPSAccuracy}m\n\n💡 Tips:\n- Move closer to a window\n- Go outdoors briefly\n- Enable high-accuracy mode\n- Restart your device GPS`,
+            { duration: 10000 }
+          )
+          console.error('❌ Check-in failed: GPS accuracy too poor', {
+            gpsAccuracy: Math.round(pos.coords.accuracy),
+            maxAcceptable: OFFICE_LOCATION.maxAcceptableGPSAccuracy,
+            coordinates: { latitude, longitude }
+          })
+          return
+        }
+
+        // 📊 Alert if GPS accuracy is moderate (warning, but allow)
+        if (pos.coords.accuracy > 100) {
+          console.warn('⚠️ WARNING: Moderate GPS accuracy', pos.coords.accuracy, 'meters')
+          toast('⚠️ GPS accuracy is moderate. For best results, move closer to a window.', { 
+            duration: 4000,
+            icon: '📡'
+          })
+        }
+
+        // 🎯 Location verification (ALWAYS ENFORCED when DEV_MODE = false)
+        if (!DEV_MODE && distance > OFFICE_LOCATION.radius) {
+          toast.dismiss('location-check')
+          setCheckingIn(false)
+          
+          // Calculate if GPS uncertainty could account for the distance
+          const uncertaintyRange = distance - pos.coords.accuracy
+          const suggestRetry = pos.coords.accuracy > 50
+          
+          toast.error(
+            `🚫 Check-in denied!\n\nYou must be at the workplace to check in.\n\nRequired: Within ${OFFICE_LOCATION.radius}m of office\nYour distance: ${Math.round(distance)}m away\nGPS Accuracy: ±${Math.round(pos.coords.accuracy)}m${suggestRetry ? '\n\n💡 Try again for better GPS accuracy' : ''}`,
+            { duration: 8000 }
+          )
+          console.error('❌ Check-in failed: Too far from office', {
+            required: OFFICE_LOCATION.radius,
+            actual: Math.round(distance),
+            gpsAccuracy: Math.round(pos.coords.accuracy),
+            uncertaintyRange: Math.round(uncertaintyRange),
+            yourLocation: { latitude, longitude },
+            officeLocation: { 
+              latitude: OFFICE_LOCATION.latitude, 
+              longitude: OFFICE_LOCATION.longitude 
+            }
+          })
           return
         }
         
-        // Dev mode notification
-        if (DEV_MODE) {
-          console.log(`[DEV MODE] Location check bypassed. Distance from office: ${Math.round(distance)}m`)
-        }
+        toast.dismiss('location-check')
         
-        console.log('✅ Location verified - proceeding with check-in')
+        console.log('✅ Location verified - proceeding with check-in', {
+          distance: Math.round(distance),
+          withinRadius: true
+        })
 
         try {
           const { data, error } = await supabase
@@ -440,6 +499,8 @@ export default function AttendanceBase({ role }: { role: string }) {
                 latitude,
                 longitude,
                 status: 'checked_in',
+                distance_from_office: Math.round(distance),
+                gps_accuracy: Math.round(pos.coords.accuracy),
               },
             ])
             .select()
@@ -464,8 +525,16 @@ export default function AttendanceBase({ role }: { role: string }) {
             }
           }
 
-          toast.success('✅ Checked in successfully!')
-          fetchAttendance()
+          toast.success(
+            `✅ Checked in successfully!\n\n📍 Location verified: ${Math.round(distance)}m from office\n🎯 GPS accuracy: ±${Math.round(pos.coords.accuracy)}m`,
+            { duration: 4000 }
+          )
+          // Force refresh to ensure data is updated
+          await fetchAttendance()
+          // Small delay to ensure database is updated, then refetch again
+          setTimeout(() => {
+            fetchAttendance()
+          }, 500)
         } catch (err: any) {
           console.error('Check-in error:', err)
           toast.error(err.message || 'Failed to check in')
@@ -474,14 +543,32 @@ export default function AttendanceBase({ role }: { role: string }) {
         }
       },
       (err) => {
+        toast.dismiss('location-check')
         console.error('Geolocation error:', err)
         console.error('Error code:', err.code, 'Message:', err.message)
-        toast.error('Failed to get your location. Please enable location services.')
+        
+        let errorMessage = 'Failed to get your location.'
+        
+        switch (err.code) {
+          case err.PERMISSION_DENIED:
+            errorMessage = '🚫 Location access denied!\n\nPlease enable location permissions in your browser settings to check in.'
+            break
+          case err.POSITION_UNAVAILABLE:
+            errorMessage = '📍 Location unavailable!\n\nYour device cannot determine your location. Please try again.'
+            break
+          case err.TIMEOUT:
+            errorMessage = '⏱️ Location request timed out!\n\nPlease check your GPS/location settings and try again.'
+            break
+          default:
+            errorMessage = '❌ Location error!\n\nPlease enable location services and try again.'
+        }
+        
+        toast.error(errorMessage, { duration: 6000 })
         setCheckingIn(false)
       },
       {
         enableHighAccuracy: true,
-        timeout: 10000,
+        timeout: 15000, // Increased timeout for better reliability
         maximumAge: 0
       }
     )
@@ -494,6 +581,7 @@ export default function AttendanceBase({ role }: { role: string }) {
     }
 
     setCheckingOut(true)
+    toast.loading('📍 Verifying your location...', { id: 'location-check-out' })
 
     try {
       const { data: lastRecord, error: fetchError } = await supabase
@@ -506,6 +594,7 @@ export default function AttendanceBase({ role }: { role: string }) {
         .single()
 
       if (fetchError || !lastRecord) {
+        toast.dismiss('location-check-out')
         setCheckingOut(false)
         toast.error('No active check-in found.')
         return
@@ -514,24 +603,84 @@ export default function AttendanceBase({ role }: { role: string }) {
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
           const { latitude, longitude } = pos.coords
+          
+          // 🔍 Debug logging for checkout
+          console.log('📍 Your Location (Check-out):', { 
+            latitude, 
+            longitude,
+            accuracy: pos.coords.accuracy,
+            altitude: pos.coords.altitude
+          })
+          console.log('🏢 Office Location:', OFFICE_LOCATION)
+          
           const distance = getDistance(
             latitude,
             longitude,
             OFFICE_LOCATION.latitude,
             OFFICE_LOCATION.longitude
           )
-
-          // Location verification (bypassed in DEV_MODE)
-          if (!DEV_MODE && distance > OFFICE_LOCATION.radius) {
+          
+          console.log('📏 Calculated Distance (Check-out):', Math.round(distance), 'meters')
+          console.log('🎯 GPS Accuracy:', Math.round(pos.coords.accuracy), 'meters')
+          
+          // ⚠️ Check GPS accuracy first - reject if too poor
+          if (pos.coords.accuracy > OFFICE_LOCATION.maxAcceptableGPSAccuracy) {
+            toast.dismiss('location-check-out')
             setCheckingOut(false)
-            toast.error(`You must be within ${OFFICE_LOCATION.radius}m of the office to check out. Current distance: ${Math.round(distance)}m`)
+            toast.error(
+              `📡 GPS signal too weak!\n\nYour GPS accuracy: ±${Math.round(pos.coords.accuracy)}m\nRequired: Better than ±${OFFICE_LOCATION.maxAcceptableGPSAccuracy}m\n\n💡 Tips:\n- Move closer to a window\n- Go outdoors briefly\n- Enable high-accuracy mode\n- Restart your device GPS`,
+              { duration: 10000 }
+            )
+            console.error('❌ Check-out failed: GPS accuracy too poor', {
+              gpsAccuracy: Math.round(pos.coords.accuracy),
+              maxAcceptable: OFFICE_LOCATION.maxAcceptableGPSAccuracy,
+              coordinates: { latitude, longitude }
+            })
+            return
+          }
+
+          // 📊 Alert if GPS accuracy is moderate (warning, but allow)
+          if (pos.coords.accuracy > 100) {
+            console.warn('⚠️ WARNING: Moderate GPS accuracy', pos.coords.accuracy, 'meters')
+            toast('⚠️ GPS accuracy is moderate. For best results, move closer to a window.', { 
+              duration: 4000,
+              icon: '📡'
+            })
+          }
+
+          // 🎯 Location verification (ALWAYS ENFORCED when DEV_MODE = false)
+          if (!DEV_MODE && distance > OFFICE_LOCATION.radius) {
+            toast.dismiss('location-check-out')
+            setCheckingOut(false)
+            
+            // Calculate if GPS uncertainty could account for the distance
+            const uncertaintyRange = distance - pos.coords.accuracy
+            const suggestRetry = pos.coords.accuracy > 50
+            
+            toast.error(
+              `🚫 Check-out denied!\n\nYou must be at the workplace to check out.\n\nRequired: Within ${OFFICE_LOCATION.radius}m of office\nYour distance: ${Math.round(distance)}m away\nGPS Accuracy: ±${Math.round(pos.coords.accuracy)}m${suggestRetry ? '\n\n💡 Try again for better GPS accuracy' : ''}`,
+              { duration: 8000 }
+            )
+            console.error('❌ Check-out failed: Too far from office', {
+              required: OFFICE_LOCATION.radius,
+              actual: Math.round(distance),
+              gpsAccuracy: Math.round(pos.coords.accuracy),
+              uncertaintyRange: Math.round(uncertaintyRange),
+              yourLocation: { latitude, longitude },
+              officeLocation: { 
+                latitude: OFFICE_LOCATION.latitude, 
+                longitude: OFFICE_LOCATION.longitude 
+              }
+            })
             return
           }
           
-          // Dev mode notification
-          if (DEV_MODE) {
-            console.log(`[DEV MODE] Location check bypassed. Distance from office: ${Math.round(distance)}m`)
-          }
+          toast.dismiss('location-check-out')
+          
+          console.log('✅ Location verified - proceeding with check-out', {
+            distance: Math.round(distance),
+            withinRadius: true
+          })
 
           try {
             const { error } = await supabase
@@ -539,6 +688,8 @@ export default function AttendanceBase({ role }: { role: string }) {
               .update({
                 check_out: new Date().toISOString(),
                 status: 'checked_out',
+                checkout_distance: Math.round(distance),
+                checkout_gps_accuracy: Math.round(pos.coords.accuracy),
               })
               .eq('id', lastRecord.id)
 
@@ -552,8 +703,16 @@ export default function AttendanceBase({ role }: { role: string }) {
               throw new Error(error.message || 'Failed to update attendance')
             }
 
-            toast.success('✅ Checked out successfully!')
-            fetchAttendance()
+            toast.success(
+              `✅ Checked out successfully!\n\n📍 Location verified: ${Math.round(distance)}m from office\n🎯 GPS accuracy: ±${Math.round(pos.coords.accuracy)}m`,
+              { duration: 4000 }
+            )
+            // Force refresh to ensure data is updated
+            await fetchAttendance()
+            // Small delay to ensure database is updated, then refetch again
+            setTimeout(() => {
+              fetchAttendance()
+            }, 500)
           } catch (err: any) {
             console.error('Check-out error:', err)
             toast.error(err.message || 'Failed to check out')
@@ -562,14 +721,32 @@ export default function AttendanceBase({ role }: { role: string }) {
           }
         },
         (err) => {
+          toast.dismiss('location-check-out')
           console.error('Geolocation error:', err)
           console.error('Error code:', err.code, 'Message:', err.message)
-          toast.error('Failed to get your location. Please enable location services.')
+          
+          let errorMessage = 'Failed to get your location.'
+          
+          switch (err.code) {
+            case err.PERMISSION_DENIED:
+              errorMessage = '🚫 Location access denied!\n\nPlease enable location permissions in your browser settings to check out.'
+              break
+            case err.POSITION_UNAVAILABLE:
+              errorMessage = '📍 Location unavailable!\n\nYour device cannot determine your location. Please try again.'
+              break
+            case err.TIMEOUT:
+              errorMessage = '⏱️ Location request timed out!\n\nPlease check your GPS/location settings and try again.'
+              break
+            default:
+              errorMessage = '❌ Location error!\n\nPlease enable location services and try again.'
+          }
+          
+          toast.error(errorMessage, { duration: 6000 })
           setCheckingOut(false)
         },
         {
           enableHighAccuracy: true,
-          timeout: 10000,
+          timeout: 15000, // Increased timeout for better reliability
           maximumAge: 0
         }
       )
@@ -732,26 +909,48 @@ export default function AttendanceBase({ role }: { role: string }) {
           </div>
 
         {todayRecord ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-            <div className="border border-border rounded-md p-3">
-              <p className="text-xs text-muted-foreground mb-0.5">Check-In</p>
-              <p className="text-base font-semibold text-green-600">
-                {todayRecord.check_in ? new Date(todayRecord.check_in).toLocaleTimeString() : '-'}
-              </p>
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+              <div className="border border-border rounded-md p-3">
+                <p className="text-xs text-muted-foreground mb-0.5">Check-In</p>
+                <p className="text-base font-semibold text-green-600">
+                  {todayRecord.check_in ? new Date(todayRecord.check_in).toLocaleTimeString() : '-'}
+                </p>
+                {todayRecord.distance_from_office !== undefined && todayRecord.distance_from_office !== null && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    📍 {todayRecord.distance_from_office}m away
+                  </p>
+                )}
+                {todayRecord.gps_accuracy !== undefined && todayRecord.gps_accuracy !== null && (
+                  <p className="text-xs text-muted-foreground">
+                    🎯 ±{todayRecord.gps_accuracy}m accuracy
+                  </p>
+                )}
+              </div>
+              <div className="border border-border rounded-md p-3">
+                <p className="text-xs text-muted-foreground mb-0.5">Check-Out</p>
+                <p className="text-base font-semibold text-blue-600">
+                  {todayRecord.check_out ? new Date(todayRecord.check_out).toLocaleTimeString() : '-'}
+                </p>
+                {todayRecord.checkout_distance !== undefined && todayRecord.checkout_distance !== null && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    📍 {todayRecord.checkout_distance}m away
+                  </p>
+                )}
+                {todayRecord.checkout_gps_accuracy !== undefined && todayRecord.checkout_gps_accuracy !== null && (
+                  <p className="text-xs text-muted-foreground">
+                    🎯 ±{todayRecord.checkout_gps_accuracy}m accuracy
+                  </p>
+                )}
+              </div>
+              <div className="border border-border rounded-md p-3">
+                <p className="text-xs text-muted-foreground mb-0.5">Work Hours</p>
+                <p className="text-base font-semibold">
+                  {calculateWorkHours(todayRecord.check_in, todayRecord.check_out)}
+                </p>
+              </div>
             </div>
-            <div className="border border-border rounded-md p-3">
-              <p className="text-xs text-muted-foreground mb-0.5">Check-Out</p>
-              <p className="text-base font-semibold text-blue-600">
-                {todayRecord.check_out ? new Date(todayRecord.check_out).toLocaleTimeString() : '-'}
-              </p>
-            </div>
-            <div className="border border-border rounded-md p-3">
-              <p className="text-xs text-muted-foreground mb-0.5">Work Hours</p>
-              <p className="text-base font-semibold">
-                {calculateWorkHours(todayRecord.check_in, todayRecord.check_out)}
-              </p>
-            </div>
-          </div>
+          </>
         ) : (
           <div className="mb-4 p-3 bg-muted/30 border border-border rounded-md text-center">
             <p className="text-xs text-muted-foreground">No attendance record for today</p>
@@ -780,16 +979,16 @@ export default function AttendanceBase({ role }: { role: string }) {
           </Button>
         </div>
 
-          <div className="mt-3 flex items-start space-x-1.5 text-xs text-muted-foreground">
-            <MapPinIcon className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+          <div className="mt-3 flex items-start space-x-1.5 text-xs">
+            <MapPinIcon className="h-3.5 w-3.5 flex-shrink-0 mt-0.5 text-green-600" />
             <p className="leading-relaxed">
-              {DEV_MODE ? (
-                <span className="text-orange-500 font-medium">
-                  🔧 DEV MODE: Location verification disabled
-                </span>
-              ) : (
-                <>Within {OFFICE_LOCATION.radius}m of office required</>
-              )}
+              <span className="text-green-600 font-medium">
+                🔒 Smart GPS Verification ACTIVE
+              </span>
+              <br />
+              <span className="text-muted-foreground">
+                Within {OFFICE_LOCATION.radius}m of office required • GPS accuracy must be better than ±{OFFICE_LOCATION.maxAcceptableGPSAccuracy}m
+              </span>
             </p>
           </div>
         </div>

@@ -142,7 +142,7 @@ export async function fetchAllCriticalData(): Promise<void> {
     await safeFetch('expenses', STORAGE_KEYS.EXPENSES, { limit: 100, orderBy: 'created_at' });
     await safeFetch('profiles', STORAGE_KEYS.PROFILES);
     await safeFetch('products', STORAGE_KEYS.PRODUCTS);
-    await safeFetch('invoices', STORAGE_KEYS.INVOICES, { limit: 50, orderBy: 'created_at' });
+    // await safeFetch('invoices', STORAGE_KEYS.INVOICES, { limit: 50, orderBy: 'created_at' }); // Commented out - table doesn't exist
 
     await updateLastSyncTime();
     console.log('[OfflineSync] Critical data sync completed');

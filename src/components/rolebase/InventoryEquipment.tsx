@@ -25,6 +25,9 @@ const categories = [
   { key: 'garment', name: 'Garment Processing' },
   { key: 'finishing', name: 'Finishing Machines' },
   { key: 'computers', name: 'Computers & Accessories' },
+  { key: 'photography', name: 'Photography Equipment' },
+  { key: 'furniture', name: 'Furniture & Fixtures' },
+  { key: 'tools', name: 'Tools & Hand Equipment' },
   { key: 'others', name: 'Other Machines' },
 ]
 

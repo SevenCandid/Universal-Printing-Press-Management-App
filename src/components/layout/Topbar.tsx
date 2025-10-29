@@ -6,6 +6,7 @@ import {
   Bars3Icon,
   CameraIcon,
   TrashIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/outline'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { Logo } from '@/components/ui/Logo'
@@ -211,6 +212,16 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
         {/* 🔔 Notification System START */}
         <NotificationsBase />
         {/* 🔔 Notification System END */}
+
+        {/* 🔄 Page Refresh Button */}
+        <button
+          onClick={() => window.location.reload()}
+          className="relative p-1.5 md:p-2 hover:bg-muted rounded-lg transition-colors"
+          aria-label="Refresh Page"
+          title="Refresh Page"
+        >
+          <ArrowPathIcon className="h-5 w-5 md:h-6 md:w-6 text-muted-foreground hover:text-foreground transition-colors" />
+        </button>
 
         <ThemeToggle />
 
