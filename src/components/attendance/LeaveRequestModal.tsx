@@ -149,6 +149,7 @@ export default function LeaveRequestModal({ isOpen, onClose, role }: LeaveReques
           details: error.details,
           hint: error.hint,
           code: error.code,
+          fullError: error
         })
         
         // User-friendly error messages
@@ -157,7 +158,17 @@ export default function LeaveRequestModal({ isOpen, onClose, role }: LeaveReques
         } else if (error.code === '42501') {
           throw new Error('Permission denied. Please check database policies.')
         } else if (error.message?.includes('violates check constraint')) {
-          throw new Error('Invalid request type or date range.')
+          // Show which constraint failed
+          if (error.message?.includes('valid_date_range')) {
+            throw new Error('End date must be on or after start date.')
+          } else if (error.message?.includes('request_type')) {
+            throw new Error(`Invalid request type. Must be one of: leave, holiday, sick_leave, personal, emergency, excuse`)
+          } else {
+            throw new Error(`Check constraint violation: ${error.message}`)
+          }
+        } else if (error.code === '23514') {
+          // Check constraint violation
+          throw new Error(`Invalid data: ${error.message}`)
         } else {
           throw new Error(error.message || 'Failed to submit leave request')
         }
