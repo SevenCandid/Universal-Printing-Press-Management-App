@@ -1,7 +1,7 @@
 # 📚 Universal Printing Press - Complete Handbook
 
-**Version:** 3.0  
-**Last Updated:** October 2025  
+**Version:** 3.1  
+**Last Updated:** October 29, 2025  
 **Developer:** Frank Bediako (frankbediako38@gmail.com)  
 **For:** All User Roles (CEO, Manager, Executive Assistant, Board, Staff)
 
@@ -42,11 +42,13 @@ The **Universal Printing Press (UPP) Smart Dashboard System** is a comprehensive
 - 👥 **Customer Database** - Track top customers and manage relationships
 - 📁 **File Storage** - Upload and manage order files and company documents
 - ✅ **Task Management** - Assign and track tasks across teams
-- 🏭 **Inventory Control** - Monitor equipment, materials, and vendors
+- 🏭 **Inventory Control** - Monitor equipment (8 categories), materials, and vendors
 - 🧾 **Expenses Tracking** - Monitor company expenses with alerts and reporting
 - 📈 **Analytics & Reports** - Generate insights, profit margins, and export data
 - 🔔 **Real-time Notifications** - Stay updated on important events (browser + email + mobile push)
-- ⏰ **Smart Attendance** - Location-verified check-in/out with history
+- 🔒 **Smart GPS Attendance** - Two-tier location verification with transparency
+- 📍 **GPS Tracking** - View distance and accuracy on attendance cards
+- 🔄 **Quick Refresh** - Page refresh button in topbar
 - 🎨 **Dark/Light Theme** - Customizable interface
 - 📱 **Responsive Design** - Works on desktop, tablet, and mobile
 
@@ -75,6 +77,20 @@ The **Universal Printing Press (UPP) Smart Dashboard System** is a comprehensive
 - **Desktop**: Use the sidebar on the left
 - **Mobile**: Tap the hamburger menu (☰) in the top-left
 - **Quick Access**: Use the top navigation bar for key actions
+
+### Topbar Features
+
+**Right Side Icons (from left to right):**
+1. **🔔 Notifications** - View in-app notifications and alerts
+2. **🔄 Refresh Button** *(NEW)* - Refresh entire page instantly
+3. **🌓 Theme Toggle** - Switch between dark and light mode
+4. **👤 User Profile** - Account settings, avatar upload, logout
+
+**Refresh Button Usage:**
+- Click to reload the entire page
+- Useful when data doesn't update automatically
+- Refreshes attendance records, orders, and all data
+- No need to press F5 or reload browser
 
 ---
 
@@ -633,26 +649,57 @@ Three modules:
 
 ### Equipment Management
 
-**Track:**
-- Printing machines
-- Cutters, binders, laminators
-- Computers and software
-- Tools and accessories
+**Equipment Categories (8 Total):**
 
-**Details:**
-- Equipment name
+1. **Printing Machines** 🖨️
+   - Offset printers, digital printers, large format printers
+   
+2. **Garment Processing** 👕
+   - Heat press machines, DTG printers, embroidery machines
+   
+3. **Finishing Machines** ✂️
+   - Cutters, laminators, binding machines, trimmers
+   
+4. **Computers & Accessories** 💻
+   - Desktop computers, laptops, monitors, keyboards, mice
+   
+5. **Photography Equipment** 📸 *(NEW)*
+   - DSLR/Mirrorless cameras, lenses, tripods
+   - Studio lighting (softboxes, ring lights, speedlights)
+   - Backdrops, stands, and reflectors
+   - Camera bags and accessories
+   
+6. **Furniture & Fixtures** 🪑 *(NEW)*
+   - Office chairs, desks, tables, cabinets
+   - Fans (standing, ceiling, table fans)
+   - Air conditioning units, shelving
+   - Reception and waiting area furniture
+   
+7. **Tools & Hand Equipment** 🔧 *(NEW)*
+   - Screwdrivers, spanners, wrenches, hammers
+   - Pliers, drills, measuring tools
+   - Cutting tools, utility knives, scissors
+   - Toolboxes and safety equipment
+   
+8. **Other Machines** 🏭
+   - Any equipment not fitting above categories
+
+**Tracked Details:**
+- Equipment name and model number
+- Category and brand
 - Serial number
-- Purchase date
+- Purchase date and cost
 - Condition (New, Good, Needs Repair, Out of Service)
-- Location
+- Current location
 - Maintenance schedule
-- Cost
 
 **Actions:**
-- Add new equipment
+- Add new equipment (with category selection)
 - Edit equipment details
 - Mark for maintenance
+- Update location
 - Decommission equipment
+- Export equipment list (CSV/PDF)
 
 ### Materials Management
 
@@ -1120,67 +1167,105 @@ Track staff attendance with location verification, clock-in/clock-out times, and
 
 ### Features
 
-- **Location-Verified Check-In** - GPS-based office proximity verification (500m radius)
-- **Smart Clock-In/Out** - One-click attendance with automatic timestamps
-- **Daily Status Summary** - View today's check-in, check-out, and duration
-- **Attendance History** - Comprehensive log with filters and search
-- **Period Filters** - Daily, Weekly, Monthly, Yearly views
-- **Staff Filters** - View specific staff or all staff (managers only)
-- **CSV & PDF Export** - Download attendance records for payroll
-- **Real-Time Updates** - Live attendance status across dashboards
+- **🔒 Smart GPS Verification** - Two-tier location verification system (PRODUCTION ACTIVE)
+- **📍 GPS Tracking Display** - Shows distance from office and GPS accuracy
+- **⏰ Smart Clock-In/Out** - One-click attendance with automatic timestamps
+- **📊 Daily Status Summary** - View today's check-in, check-out, and work hours
+- **📈 GPS Transparency** - See exact distance and GPS accuracy on attendance cards
+- **📜 Attendance History** - Comprehensive log with filters and search
+- **🔄 Auto-Refresh** - Page refresh button in topbar for instant updates
+- **📅 Period Filters** - Daily, Weekly, Monthly, Yearly, Custom Range views
+- **👥 Staff Filters** - View specific staff or all staff (managers only)
+- **📄 CSV & PDF Export** - Download attendance records for payroll
+- **🔔 Real-Time Updates** - Live attendance status across dashboards
 
-### Smart Check-In System
+### 🔒 Smart GPS Verification System (PRODUCTION READY)
+
+**Two-Tier Verification:**
+
+1. **Tier 1: GPS Accuracy Check**
+   - Rejects GPS signals with accuracy worse than ±500m
+   - Prevents wildly inaccurate locations (like the 383km error)
+   - Provides clear feedback: "GPS signal too weak!"
+   - Suggests improvements: Move near window, enable high-accuracy mode
+
+2. **Tier 2: Distance Verification**
+   - Verifies you're within **300 meters** of office
+   - Office location: **Sampa, Ghana** (7.952755, -2.698595)
+   - Uses Haversine formula for accurate distance calculation
+   - Accounts for typical GPS accuracy variations
+
+**GPS Quality Thresholds:**
+- ✅ **±5-50m** - Excellent signal (no warnings)
+- ⚠️ **±51-100m** - Good signal (moderate warning, allowed)
+- ⚠️ **±101-500m** - Acceptable signal (warning shown, allowed)
+- 🚫 **>±500m** - Rejected (GPS too unreliable)
 
 **Location Verification:**
-- System verifies you're within 500 meters of office location
-- Office coordinates: **Sampa, Ghana** (7.952673, -2.698856)
-- Uses browser's Geolocation API
-- Error message if out of range: "You must be within 500m of the office to check in"
-
-**Dev Mode:**
-- Development mode allows check-in from anywhere
-- Shows "DEV MODE: Location check bypassed" message
-- Useful for testing and remote work scenarios
+- Uses browser's Geolocation API with high accuracy mode
+- 15-second timeout for reliable GPS lock
+- Fresh location data (no cached coordinates)
+- Comprehensive error handling with actionable messages
 
 **Check-In Process:**
 1. Navigate to **Attendance** page
-2. See today's status card
+2. See today's status card with "🔒 Smart GPS Verification ACTIVE" indicator
 3. If not checked in:
-   - Click **"Check In"** button
-   - Browser requests location permission (first time)
-   - Grant permission
-   - System verifies location
-   - Check-in recorded with timestamp
-   - Success toast appears
+   - Click **"Check In"** button (green)
+   - Loading message: "📍 Verifying your location..."
+   - Browser requests location permission (first time) - Grant it
+   - **System performs two checks:**
+     - Check 1: GPS accuracy (must be better than ±500m)
+     - Check 2: Distance from office (must be within 300m)
+   - If checks pass:
+     - Check-in recorded with timestamp, GPS coordinates, distance, and accuracy
+     - Success message: "✅ Checked in successfully! 📍 46m from office 🎯 ±20m accuracy"
+   - If checks fail:
+     - Clear error message with exact problem
+     - Helpful tips to improve GPS or confirm location
 4. Work hours start counting
 
 **Check-Out Process:**
 1. At end of work day
-2. Click **"Check Out"** button
-3. Check-out recorded with timestamp
-4. Total duration calculated automatically
-5. Status changes to "Checked Out"
+2. Click **"Check Out"** button (blue)
+3. Loading message: "📍 Verifying your location..."
+4. Same GPS verification as check-in
+5. Check-out recorded with timestamp, distance, and GPS accuracy
+6. Success message: "✅ Checked out successfully! 📍 46m from office 🎯 ±20m accuracy"
+7. Total duration calculated automatically
+8. Status changes to "Checked Out"
 
-### Today's Status Card
+### Today's Status Card (Enhanced with GPS Display)
 
 **Displays:**
-- 📅 **Current Date**: Today's date
-- ⏰ **Check-In Time**: When you arrived (e.g., "8:30 AM")
-- ⏱️ **Duration**: Hours worked so far (live counter)
-- 🏁 **Check-Out Time**: When you left (after check-out)
-- 📊 **Status**: 
-  - "Not Checked In" (gray)
-  - "Checked In" (green)
-  - "Checked Out" (blue)
+
+**Check-In Card:**
+- ⏰ **Check-In Time**: When you arrived (e.g., "8:45:23 AM")
+- 📍 **Distance**: How far from office at check-in (e.g., "46m away")
+- 🎯 **GPS Accuracy**: GPS signal quality (e.g., "±20m accuracy")
+
+**Check-Out Card:**
+- 🏁 **Check-Out Time**: When you left (e.g., "5:12:47 PM")
+- 📍 **Distance**: How far from office at check-out (e.g., "46m away")
+- 🎯 **GPS Accuracy**: GPS signal quality (e.g., "±20m accuracy")
+
+**Work Hours Card:**
+- ⏱️ **Total Duration**: Hours worked (e.g., "8h 27m")
+- Calculated automatically from check-in to check-out
+
+**Status Indicator:**
+- "Not Checked In" (no data yet)
+- "Checked In" (green) - Currently at work
+- "Checked Out" (blue) - Completed work day
 
 **Action Buttons:**
 - **Check In** (green) - Available if not checked in
-- **Check Out** (blue) - Available if checked in
-- Disabled if already checked out
+- **Check Out** (blue) - Available if checked in, disabled after check-out
+- Both disabled while processing
 
-**Location Note:**
-- Shows when location verification is active
-- "You must be within 500m of the office to check in"
+**GPS Verification Status:**
+- Shows "🔒 Smart GPS Verification ACTIVE" at bottom
+- Indicates: "Within 300m of office required • GPS accuracy must be better than ±500m"
 
 ### Attendance History
 
@@ -1433,12 +1518,56 @@ Click **"Filters"** button to show/hide filter options
 
 #### 11. **Attendance Check-In Failing**
 
-**Solutions:**
-- Enable location services on device
-- Grant browser location permission
-- Ensure within 500m of office (Sampa, Ghana coordinates)
-- Refresh page and try again
-- Contact admin if working remotely (DEV_MODE may be needed)
+**Common Issues & Solutions:**
+
+**"GPS signal too weak!" Error:**
+- GPS accuracy is worse than ±500m
+- **Solutions:**
+  - Move closer to a window (improves GPS signal)
+  - Go outdoors briefly to get better GPS lock
+  - Enable high-accuracy GPS mode in device settings
+  - Wait 30 seconds for GPS to stabilize, then retry
+  - Restart device GPS (toggle airplane mode on/off)
+  - Use smartphone instead of laptop (better GPS)
+
+**"Check-in denied! Too far from office" Error:**
+- Distance from office is >300m
+- **Solutions:**
+  - Verify you're physically at the office (Sampa location: 7.952755, -2.698595)
+  - Walk closer to the office building
+  - Wait for better GPS accuracy and retry
+  - Contact manager if legitimately at office but system rejects
+
+**"Location access denied!" Error:**
+- Browser location permissions not granted
+- **Solutions:**
+  - Click lock icon in browser address bar
+  - Change Location permission to "Allow"
+  - Refresh page and try again
+  - Clear browser cache and cookies if issue persists
+
+**"Location unavailable!" Error:**
+- Device cannot determine location
+- **Solutions:**
+  - Enable GPS/Location Services in device settings
+  - Move to area with better GPS signal (near windows/outdoors)
+  - Check that device has GPS hardware (not all laptops do)
+  - Use mobile device instead
+
+**"Location request timed out!" Error:**
+- GPS taking too long to lock
+- **Solutions:**
+  - Ensure GPS/Location is enabled at OS level
+  - Move to area with better satellite visibility
+  - Wait longer (up to 30 seconds) for GPS lock
+  - Restart browser and try again
+
+**Check-In Not Appearing in Today's Attendance:**
+- **Solutions:**
+  - Click the refresh button (🔄) in topbar beside notifications
+  - Wait a few seconds for data to sync
+  - Refresh browser page (F5 or Ctrl+R)
+  - Check browser console for errors (F12)
 
 #### 12. **Financial Metrics Not Updating in Reports**
 
