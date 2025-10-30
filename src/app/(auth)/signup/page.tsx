@@ -74,7 +74,7 @@ export default function SignupPage() {
     <div className="flex items-center justify-center min-h-screen bg-background">
       <div className="max-w-md w-full space-y-6 p-8 bg-card border border-border rounded-xl shadow-lg">
         <div className="flex flex-col items-center space-y-3">
-          <img src="/UPPLOGO.png" alt="Logo" width={80} height={80} />
+          <Image src="/UPPLOGO.png" alt="Logo" width={80} height={80} priority />
           <h2 className="text-2xl font-semibold text-foreground">Create Account</h2>
           <p className="text-sm text-muted-foreground">
             Sign up to access your workspace
