@@ -138,3 +138,6 @@ CHECK (type IN (
 **Time:** ⏱️ 2 minutes
 **Next:** Run the SQL → Refresh → Test
 
+
+
+

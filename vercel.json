@@ -1,0 +1,12 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "framework": "nextjs",
+  "github": {
+    "silent": true
+  },
+  "env": {
+    "NEXT_PUBLIC_APP_NAME": "Business Management System"
+  }
+}
+

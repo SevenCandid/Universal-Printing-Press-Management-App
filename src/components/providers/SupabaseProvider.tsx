@@ -28,7 +28,18 @@ export const SupabaseProvider = ({
     })
 
     // 🔹 Keep session updated whenever auth state changes
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('🔐 Auth state change:', event)
+      
+      // Handle different auth events
+      if (event === 'TOKEN_REFRESHED') {
+        console.log('✅ Session token refreshed successfully')
+      } else if (event === 'SIGNED_OUT') {
+        console.log('🚪 User signed out')
+      } else if (event === 'SIGNED_IN') {
+        console.log('🎉 User signed in')
+      }
+      
       setSession(session)
     })
 

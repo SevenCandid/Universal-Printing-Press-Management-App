@@ -21,6 +21,7 @@ import {
   BookOpen, // Handbook icon
   Clock, // Attendance icon
   Receipt, // Expenses icon
+  MessagesSquare, // Forum icon
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -54,6 +55,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     { name: 'Attendance', href: `/${r}/attendance`, icon: Clock },
     { name: 'Expenses', href: `/${r}/expenses`, icon: Receipt },
     { name: 'Reports', href: `/${r}/reports`, icon: BarChart3 },
+    { name: 'Forum', href: `/${r}/forum`, icon: MessagesSquare },
     { name: 'Handbook', href: `/${r}/handbook`, icon: BookOpen },
   ]
 

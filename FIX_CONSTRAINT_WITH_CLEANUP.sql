@@ -63,3 +63,6 @@ SELECT
 FROM information_schema.check_constraints
 WHERE constraint_name = 'notifications_type_check';
 
+
+
+

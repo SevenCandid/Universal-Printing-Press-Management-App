@@ -163,3 +163,6 @@ AND tablename IN ('forum_posts', 'forum_comments');
 -- Then create the ForumBase component
 -- =====================================================
 
+
+
+

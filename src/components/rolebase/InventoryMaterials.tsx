@@ -52,6 +52,7 @@ const categories = [
   { key: 'embroidery', name: 'Embroidery Materials' },
   { key: 'sewing', name: 'Sewing & Neatning' },
   { key: 'dtf', name: 'DTF Printing Materials (Film, Powder, Ink)' },
+  { key: 'lf', name: 'Large Format Printing Materials (Banners, Stickers, Ink)' },
   { key: 'other', name: 'Other Materials' },
 ]
 

@@ -43,3 +43,6 @@ console.log('Do you own any ideas?', ideaPosts.some(p => p.author_id === data?.u
 3. If YES → Old ideas were created by someone else
 4. If NO → There's a bug (run the console script above and share results)
 
+
+
+

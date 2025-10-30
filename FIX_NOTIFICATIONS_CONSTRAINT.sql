@@ -40,3 +40,6 @@ BEGIN
   RAISE NOTICE '📝 Forum notification types (forum_post, forum_comment) are now allowed.';
 END $$;
 
+
+
+

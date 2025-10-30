@@ -4,3 +4,6 @@ export default function BoardForumPage() {
   return <ForumBase role="board" />
 }
 
+
+
+

@@ -352,3 +352,6 @@ If missing, re-run `CREATE_FORUM_TABLES.sql`
 
 **The diagnostic will tell you EXACTLY what's wrong!** 🎯
 
+
+
+

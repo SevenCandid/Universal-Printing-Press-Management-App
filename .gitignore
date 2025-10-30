@@ -82,3 +82,4 @@ temp/
 .vercel
 ".env.local" 
 ".env.local" 
+public/clear-sw.html 

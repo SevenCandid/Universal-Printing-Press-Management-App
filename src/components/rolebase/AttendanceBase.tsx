@@ -65,7 +65,20 @@ type AttendanceRecord = {
   profiles?: {
     name?: string
     email?: string
+    role?: string
   }
+  activeBreak?: {
+    id: string
+    attendance_id: string
+    user_id: string
+    break_start: string
+    break_end?: string
+    break_type: string
+    break_duration?: number
+  } | null
+  allBreaks?: any[]
+  completedBreaks?: any[]
+  totalBreakMinutes?: number
 }
 
 type StaffMember = {
@@ -84,24 +97,157 @@ export default function AttendanceBase({ role }: { role: string }) {
   const [todayRecord, setTodayRecord] = useState<AttendanceRecord | null>(null)
   
   // 🔍 Filter States
-  const [periodFilter, setPeriodFilter] = useState<string>('this_month')
+  const [periodFilter, setPeriodFilter] = useState<string>('today')
   const [selectedStaff, setSelectedStaff] = useState<string>('all')
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([])
   const [customStartDate, setCustomStartDate] = useState<string>('')
   const [customEndDate, setCustomEndDate] = useState<string>('')
   const [showFilters, setShowFilters] = useState(false)
   
+  // 👥 Currently checked in staff (for CEO)
+  const [currentlyCheckedIn, setCurrentlyCheckedIn] = useState<AttendanceRecord[]>([])
+  
+  // 📊 Attendance Statistics
+  const [monthlyStats, setMonthlyStats] = useState<{ month: string; count: number; completed: number }[]>([])
+  const [staffMonthlyStats, setStaffMonthlyStats] = useState<{ 
+    staffName: string; 
+    staffEmail: string;
+    userId: string;
+    stats: { month: string; daysCheckedIn: number; totalDays: number; percentage: number }[] 
+  }[]>([])
+  
   // Leave request modal
   const [showLeaveModal, setShowLeaveModal] = useState(false)
 
-  // Helper: Check if user can view all staff
-  const canViewAllStaff = () => role === 'ceo' || role === 'manager' || role === 'executive_assistant'
+  // Helper: Check if user can view all staff (CEO only)
+  const canViewAllStaff = () => role === 'ceo'
+
+  // Helper: Handle JWT expiration by redirecting to login
+  const handleJWTExpiration = async (error: any) => {
+    if (error?.message?.includes('JWT') || error?.message?.includes('expired') || error?.code === 'PGRST301') {
+      console.error('🔐 Session expired - redirecting to login')
+      toast.error('Your session has expired. Please log in again.', { duration: 5000 })
+      await supabase.auth.signOut()
+      window.location.href = '/login'
+      return true
+    }
+    return false
+  }
+
+  // 📊 Calculate monthly attendance statistics
+  const calculateMonthlyStats = (records: AttendanceRecord[]) => {
+    const monthlyData: { [key: string]: { count: number; completed: number } } = {}
+    
+    records.forEach(record => {
+      const date = new Date(record.check_in)
+      const monthYear = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+      
+      if (!monthlyData[monthYear]) {
+        monthlyData[monthYear] = { count: 0, completed: 0 }
+      }
+      
+      monthlyData[monthYear].count++
+      if (record.status === 'checked_out') {
+        monthlyData[monthYear].completed++
+      }
+    })
+    
+    // Convert to array and sort by date (most recent first)
+    const statsArray = Object.entries(monthlyData).map(([month, data]) => ({
+      month,
+      count: data.count,
+      completed: data.completed
+    }))
+    
+    // Sort by date
+    statsArray.sort((a, b) => {
+      const dateA = new Date(a.month)
+      const dateB = new Date(b.month)
+      return dateB.getTime() - dateA.getTime()
+    })
+    
+    return statsArray
+  }
+
+  // 📊 Calculate per-staff monthly attendance statistics (for CEO)
+  const calculateStaffMonthlyStats = (records: AttendanceRecord[]) => {
+    // Group by staff
+    const staffData: { [userId: string]: { 
+      name: string; 
+      email: string;
+      months: { [month: string]: Set<string> } 
+    } } = {}
+    
+    records.forEach(record => {
+      const userId = record.user_id
+      const staffName = record.profiles?.name || 'Unknown'
+      const staffEmail = record.profiles?.email || ''
+      const checkInDate = new Date(record.check_in)
+      const monthYear = checkInDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+      const dayOfMonth = checkInDate.toISOString().split('T')[0] // YYYY-MM-DD
+      
+      if (!staffData[userId]) {
+        staffData[userId] = {
+          name: staffName,
+          email: staffEmail,
+          months: {}
+        }
+      }
+      
+      if (!staffData[userId].months[monthYear]) {
+        staffData[userId].months[monthYear] = new Set()
+      }
+      
+      // Add unique day to the set
+      staffData[userId].months[monthYear].add(dayOfMonth)
+    })
+    
+    // Convert to array format
+    const staffStatsArray = Object.entries(staffData).map(([userId, data]) => {
+      const monthStats = Object.entries(data.months).map(([month, daysSet]) => {
+        const daysCheckedIn = daysSet.size
+        // Get total days in that month
+        const [monthName, year] = month.split(' ')
+        const monthIndex = new Date(`${monthName} 1, ${year}`).getMonth()
+        const totalDays = new Date(parseInt(year), monthIndex + 1, 0).getDate()
+        const percentage = Math.round((daysCheckedIn / totalDays) * 100)
+        
+        return {
+          month,
+          daysCheckedIn,
+          totalDays,
+          percentage
+        }
+      })
+      
+      // Sort months by date (most recent first)
+      monthStats.sort((a, b) => {
+        const dateA = new Date(a.month)
+        const dateB = new Date(b.month)
+        return dateB.getTime() - dateA.getTime()
+      })
+      
+      return {
+        staffName: data.name,
+        staffEmail: data.email,
+        userId,
+        stats: monthStats
+      }
+    })
+    
+    // Sort by staff name
+    staffStatsArray.sort((a, b) => a.staffName.localeCompare(b.staffName))
+    
+    return staffStatsArray
+  }
 
   useEffect(() => {
     if (session?.user) {
+      fetchTodayRecord() // Always fetch today's record first
       fetchAttendance()
       if (canViewAllStaff()) {
         fetchStaffMembers()
+        fetchCurrentlyCheckedIn()
       }
     }
   }, [session])
@@ -110,12 +256,30 @@ export default function AttendanceBase({ role }: { role: string }) {
   useEffect(() => {
     if (session?.user) {
       fetchAttendance()
+      // Don't refetch today's record when filters change - it's independent
+      if (canViewAllStaff()) {
+        fetchCurrentlyCheckedIn()
+      }
     }
   }, [periodFilter, selectedStaff, customStartDate, customEndDate])
+  
+  // Auto-refresh currently checked-in staff every 30 seconds (for CEO)
+  useEffect(() => {
+    if (!canViewAllStaff()) return
+    
+    const interval = setInterval(() => {
+      fetchCurrentlyCheckedIn()
+    }, 30000) // 30 seconds
+    
+    return () => clearInterval(interval)
+  }, [session])
 
   // 👥 Fetch staff members (for managers/CEO)
   const fetchStaffMembers = async () => {
-    if (!supabase) return
+    if (!supabase) {
+      console.log('⚠️ fetchStaffMembers skipped - supabase not ready')
+      return
+    }
     
     try {
       const { data, error } = await supabase
@@ -135,7 +299,152 @@ export default function AttendanceBase({ role }: { role: string }) {
       
       setStaffMembers(mappedData)
     } catch (err: any) {
-      console.error('Fetch staff error:', err)
+      console.error('Fetch staff error:', {
+        message: err?.message,
+        code: err?.code,
+        details: err?.details,
+        fullError: err
+      })
+    }
+  }
+
+  // 👥 Fetch currently checked-in staff (for CEO real-time monitoring)
+  const fetchCurrentlyCheckedIn = async () => {
+    if (!supabase || !canViewAllStaff()) return
+    
+    try {
+      const today = new Date()
+      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+      
+      const { data, error } = await supabase
+        .from('attendance')
+        .select('*')
+        .eq('status', 'checked_in')
+        .gte('check_in', todayStart.toISOString())
+        .order('check_in', { ascending: false })
+      
+      if (error) {
+        console.error('Error fetching currently checked in:', error)
+        return
+      }
+      
+      if (data && data.length > 0) {
+        // Fetch profiles for each checked-in user
+        const userIds = [...new Set(data.map(r => r.user_id))]
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('id, name, email, role')
+          .in('id', userIds)
+        
+        // Fetch ALL breaks for checked-in users (both active and completed)
+        const attendanceIds = data.map(r => r.id)
+        const { data: breaksData } = await supabase
+          .from('breaks')
+          .select('*')
+          .in('attendance_id', attendanceIds)
+          .order('break_start', { ascending: false })
+        
+        if (profilesData) {
+          const profilesMap = new Map(profilesData.map(p => [p.id, p]))
+          
+          // Group breaks by attendance_id
+          const breaksGrouped = (breaksData || []).reduce((acc, breakItem) => {
+            if (!acc[breakItem.attendance_id]) {
+              acc[breakItem.attendance_id] = []
+            }
+            acc[breakItem.attendance_id].push(breakItem)
+            return acc
+          }, {} as Record<string, any[]>)
+          
+          const enrichedData = data.map(record => {
+            const breaks = breaksGrouped[record.id] || []
+            const activeBreak = breaks.find(b => !b.break_end) || null
+            const completedBreaks = breaks.filter(b => b.break_end)
+            
+            // Calculate total break time
+            const totalBreakMinutes = completedBreaks.reduce((acc, b) => {
+              if (b.break_duration) return acc + b.break_duration
+              if (b.break_end) {
+                const duration = Math.floor(
+                  (new Date(b.break_end).getTime() - new Date(b.break_start).getTime()) / (1000 * 60)
+                )
+                return acc + duration
+              }
+              return acc
+            }, 0)
+            
+            return {
+              ...record,
+              profiles: profilesMap.get(record.user_id) || null,
+              activeBreak,
+              allBreaks: breaks,
+              completedBreaks,
+              totalBreakMinutes
+            }
+          })
+          setCurrentlyCheckedIn(enrichedData)
+          console.log('✅ Currently checked in:', enrichedData.length, 'staff')
+        }
+      } else {
+        setCurrentlyCheckedIn([])
+      }
+    } catch (err) {
+      console.error('Error in fetchCurrentlyCheckedIn:', err)
+    }
+  }
+
+  // 📅 Fetch today's attendance record for current user (independent of filters)
+  const fetchTodayRecord = async () => {
+    if (!session?.user || !supabase) {
+      console.log('⚠️ fetchTodayRecord skipped - session or supabase not ready:', {
+        hasSession: !!session,
+        hasUser: !!session?.user,
+        hasSupabase: !!supabase
+      })
+      return
+    }
+    
+    try {
+      // Get today's date in UTC with proper timezone handling
+      const now = new Date()
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
+      
+      console.log('🔍 Fetching today\'s record for:', session.user.id)
+      console.log('📅 Date range:', todayStart.toISOString(), 'to', todayEnd.toISOString())
+      
+      const { data, error } = await supabase
+        .from('attendance')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .gte('check_in', todayStart.toISOString())
+        .lte('check_in', todayEnd.toISOString())
+        .order('check_in', { ascending: false })
+        .limit(1)
+
+      if (error) {
+        console.error('❌ Error fetching today record:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+          fullError: error
+        })
+        
+        // Check for JWT expiration
+        if (await handleJWTExpiration(error)) return
+        return
+      }
+
+      if (data && data.length > 0) {
+        console.log('✅ Today\'s record found:', data[0])
+        setTodayRecord(data[0] as AttendanceRecord)
+      } else {
+        console.log('ℹ️ No record found for today')
+        setTodayRecord(null)
+      }
+    } catch (err) {
+      console.error('❌ Error in fetchTodayRecord:', err)
     }
   }
 
@@ -182,30 +491,85 @@ export default function AttendanceBase({ role }: { role: string }) {
   }
 
   const fetchAttendance = async () => {
-    if (!session?.user || !supabase) return
+    if (!session?.user || !supabase) {
+      console.log('⚠️ fetchAttendance skipped - session or supabase not ready:', {
+        hasSession: !!session,
+        hasUser: !!session?.user,
+        hasSupabase: !!supabase
+      })
+      return
+    }
     
     setLoading(true)
     try {
       const { startDate, endDate } = getDateRange()
       
+      console.log('🔍 Fetching attendance...', {
+        dateRange: `${startDate} to ${endDate}`,
+        isCEO: canViewAllStaff(),
+        selectedStaff
+      })
+      
       // Build query - Note: profiles join might fail if foreign key doesn't exist
+      // Use check_in for date filtering (not created_at) to avoid timezone issues
+      const startDateTime = new Date(`${startDate}T00:00:00`)
+      const endDateTime = new Date(`${endDate}T23:59:59`)
+      
+      console.log('📅 Date range for query:', {
+        startDate: startDateTime.toISOString(),
+        endDate: endDateTime.toISOString()
+      })
+      
       let query = supabase
         .from('attendance')
         .select('*')
-        .gte('created_at', `${startDate}T00:00:00`)
-        .lte('created_at', `${endDate}T23:59:59`)
-        .order('created_at', { ascending: false })
+        .gte('check_in', startDateTime.toISOString())
+        .lte('check_in', endDateTime.toISOString())
+        .order('check_in', { ascending: false })
 
-      // Filter by user if not viewing all staff
-      if (!canViewAllStaff() || selectedStaff === 'self') {
-        query = query.eq('user_id', session.user.id)
-      } else if (selectedStaff && selectedStaff !== 'all') {
-        query = query.eq('user_id', selectedStaff)
+      // For CEO, only show checked-out records in history (active check-ins shown separately)
+      // For others, show all their records
+      if (canViewAllStaff()) {
+        console.log('📋 CEO view: Filtering for checked_out status only')
+        query = query.eq('status', 'checked_out')
       }
 
-      const { data, error } = await query
+      // Filter by user if not viewing all staff
+      if (!canViewAllStaff()) {
+        // Regular staff can only see their own attendance
+        console.log('👤 Staff view: Filtering for user', session.user.id)
+        query = query.eq('user_id', session.user.id)
+      } else if (selectedStaff && selectedStaff !== 'all') {
+        // CEO viewing a specific staff member
+        console.log('👤 CEO view: Filtering for staff', selectedStaff)
+        query = query.eq('user_id', selectedStaff)
+      }
+      // Otherwise show all staff (for CEO when selectedStaff === 'all')
 
-      if (error) throw error
+      const { data, error } = await query
+      
+      if (!error) {
+        console.log('✅ Fetched attendance records:', data?.length || 0, 'records')
+        if (data && data.length > 0) {
+          console.log('📋 Sample records:', data.slice(0, 3).map(r => ({
+            id: r.id.substring(0, 8),
+            user_id: r.user_id.substring(0, 8),
+            status: r.status,
+            check_in: r.check_in,
+            check_out: r.check_out,
+            created_at: r.created_at
+          })))
+        }
+      }
+
+      if (error) {
+        console.error('❌ Query error:', error)
+        
+        // Check for JWT expiration
+        if (await handleJWTExpiration(error)) return
+        
+        throw error
+      }
       
       // Fetch profile data for each attendance record (if viewing all staff)
       let enrichedData = data || []
@@ -236,26 +600,50 @@ export default function AttendanceBase({ role }: { role: string }) {
         }
       }
       
+      console.log('📊 Setting attendance state with', enrichedData.length, 'records')
+      console.log('Records:', enrichedData.map(r => ({
+        id: r.id.substring(0, 8),
+        status: r.status,
+        check_in: r.check_in,
+        check_out: r.check_out
+      })))
+      
       setAttendance(enrichedData)
       
-      // Check if there's a record for today (for current user only)
-      const today = new Date().toISOString().split('T')[0]
-      const todayRecords = data?.filter((record: AttendanceRecord) => 
-        record.created_at.startsWith(today) && record.user_id === session.user.id
-      )
+      // Calculate monthly statistics
+      const stats = calculateMonthlyStats(enrichedData)
+      setMonthlyStats(stats)
+      console.log('📊 Monthly stats calculated:', stats)
       
-      if (todayRecords && todayRecords.length > 0) {
-        const activeRecord = todayRecords.find((r: AttendanceRecord) => r.status === 'checked_in')
-        setTodayRecord(activeRecord || todayRecords[0])
-      } else {
-        setTodayRecord(null)
+      // Calculate per-staff monthly statistics (for CEO)
+      if (canViewAllStaff()) {
+        const staffStats = calculateStaffMonthlyStats(enrichedData)
+        setStaffMonthlyStats(staffStats)
+        console.log('📊 Per-staff monthly stats calculated:', staffStats)
       }
+      
+      // Note: todayRecord is now managed by fetchTodayRecord() separately
+      // This keeps the filter-based attendance list and today's status independent
     } catch (err: any) {
-      console.error('Fetch attendance error:', err)
+      console.error('Fetch attendance error:', {
+        message: err?.message,
+        code: err?.code,
+        details: err?.details,
+        hint: err?.hint,
+        fullError: err
+      })
+      
+      // Check for JWT expiration
+      if (await handleJWTExpiration(err)) {
+        setLoading(false)
+        return
+      }
       
       // User-friendly error message
       if (err.code === '42P01') {
         toast.error('Attendance table not found. Please run the database setup.')
+      } else if (err?.message) {
+        toast.error(`Failed to load attendance: ${err.message}`)
       } else {
         toast.error('Failed to load attendance records')
       }
@@ -273,7 +661,7 @@ export default function AttendanceBase({ role }: { role: string }) {
 
     try {
       // Create CSV header
-      const headers = ['Date', 'Staff Name', 'Email', 'Check-In', 'Check-Out', 'Work Hours', 'Status']
+      const headers = ['Date', 'Staff Name', 'Email', 'Check-In', 'Check-Out', 'Work Hours', 'Check-In Distance (m)', 'Check-In GPS (±m)', 'Check-Out Distance (m)', 'Check-Out GPS (±m)', 'Status']
       
       // Create CSV rows
       const rows = attendance.map(record => {
@@ -287,15 +675,50 @@ export default function AttendanceBase({ role }: { role: string }) {
           record.check_in ? new Date(record.check_in).toLocaleTimeString() : '-',
           record.check_out ? new Date(record.check_out).toLocaleTimeString() : '-',
           calculateWorkHours(record.check_in, record.check_out),
+          record.distance_from_office ?? '-',
+          record.gps_accuracy ?? '-',
+          record.checkout_distance ?? '-',
+          record.checkout_gps_accuracy ?? '-',
           record.status.replace('_', ' ').toUpperCase()
         ]
       })
 
+      // Add statistics section if available
+      let csvLines: string[] = []
+      
+      // Add per-staff monthly statistics (CEO only)
+      if (canViewAllStaff() && staffMonthlyStats.length > 0) {
+        csvLines.push('STAFF MONTHLY ATTENDANCE STATISTICS')
+        csvLines.push('')
+        csvLines.push('Staff Name,Email,Month,Days Checked In,Total Days,Attendance Rate')
+        staffMonthlyStats.forEach(staff => {
+          staff.stats.forEach(monthStat => {
+            csvLines.push(`"${staff.staffName}","${staff.staffEmail}","${monthStat.month}",${monthStat.daysCheckedIn},${monthStat.totalDays},${monthStat.percentage}%`)
+          })
+        })
+        csvLines.push('')
+      }
+      
+      // Add overall monthly statistics
+      if (monthlyStats.length > 0) {
+        csvLines.push('MONTHLY ATTENDANCE STATISTICS')
+        csvLines.push('')
+        csvLines.push('Month,Total Check-ins,Completed,Active,Completion Rate')
+        monthlyStats.forEach(stat => {
+          const completionRate = Math.round((stat.completed / stat.count) * 100)
+          csvLines.push(`"${stat.month}",${stat.count},${stat.completed},${stat.count - stat.completed},${completionRate}%`)
+        })
+        csvLines.push('')
+      }
+      
+      csvLines.push('DETAILED ATTENDANCE RECORDS')
+      csvLines.push('')
+      
       // Combine headers and rows
-      const csvContent = [
-        headers.join(','),
-        ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-      ].join('\n')
+      csvLines.push(headers.join(','))
+      csvLines.push(...rows.map(row => row.map(cell => `"${cell}"`).join(',')))
+      
+      const csvContent = csvLines.join('\n')
 
       // Create blob and download
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
@@ -320,7 +743,7 @@ export default function AttendanceBase({ role }: { role: string }) {
   }
 
   // 📄 Export to PDF
-  const exportToPDF = () => {
+  const exportToPDF = async () => {
     if (attendance.length === 0) {
       toast.error('No attendance records to export')
       return
@@ -330,20 +753,122 @@ export default function AttendanceBase({ role }: { role: string }) {
       const doc = new jsPDF()
       const { startDate, endDate } = getDateRange()
 
-      // Add title
+      // Add company branding header with logo
+      try {
+        // Load logo image
+        const logoImg = new Image()
+        logoImg.crossOrigin = 'anonymous'
+        
+        // Wait for image to load
+        await new Promise<void>((resolve, reject) => {
+          logoImg.onload = () => {
+            try {
+              // Calculate aspect ratio to prevent stretching
+              const logoWidth = 25 // Base width in mm
+              const aspectRatio = logoImg.width / logoImg.height
+              const logoHeight = logoWidth / aspectRatio
+              
+              doc.addImage(logoImg, 'PNG', 14, 10, logoWidth, logoHeight)
+              console.log(`Logo added: ${logoImg.width}x${logoImg.height}px, aspect ratio: ${aspectRatio.toFixed(2)}`)
+              resolve()
+            } catch (err) {
+              console.log('Error adding logo to PDF:', err)
+              resolve() // Still resolve to continue without logo
+            }
+          }
+          logoImg.onerror = () => {
+            console.log('Logo image failed to load')
+            resolve() // Continue without logo
+          }
+          logoImg.src = '/assets/logo/UPPLOGO.png'
+        })
+      } catch (error) {
+        console.log('Logo could not be loaded:', error)
+      }
+      
+      // Add company name next to logo
+      doc.setFontSize(20)
+      doc.setTextColor(0, 0, 0)
+      doc.text('Universal Printing Press', 48, 18)
+      doc.setFontSize(10)
+      doc.setTextColor(100, 100, 100)
+      doc.text('Attendance Management System', 48, 25)
+      
+      // Add separator line
+      doc.setDrawColor(200, 200, 200)
+      doc.line(14, 35, 196, 35)
+      
+      // Add report title
+      doc.setTextColor(0, 0, 0)
       doc.setFontSize(18)
-      doc.text('Attendance Report', 14, 22)
+      doc.text('Attendance Report', 14, 48)
       
       // Add period info
       doc.setFontSize(11)
-      doc.text(`Period: ${startDate} to ${endDate}`, 14, 32)
+      doc.setTextColor(80, 80, 80)
+      doc.text(`Period: ${startDate} to ${endDate}`, 14, 58)
       
       // Add staff filter info if applicable
       if (selectedStaff && selectedStaff !== 'all') {
         const staff = staffMembers.find(s => s.user_id === selectedStaff)
         if (staff) {
-          doc.text(`Staff: ${staff.name}`, 14, 38)
+          doc.text(`Staff: ${staff.name}`, 14, 64)
         }
+      }
+
+      // Add Per-Staff Monthly Statistics (CEO Only)
+      let statsStartY = selectedStaff && selectedStaff !== 'all' ? 71 : 65
+      if (canViewAllStaff() && staffMonthlyStats.length > 0) {
+        doc.setFontSize(12)
+        doc.text('Staff Monthly Attendance Statistics', 14, statsStartY)
+        
+        const staffStatsData: any[] = []
+        staffMonthlyStats.forEach(staff => {
+          staff.stats.forEach(monthStat => {
+            staffStatsData.push([
+              staff.staffName,
+              monthStat.month,
+              `${monthStat.daysCheckedIn}/${monthStat.totalDays}`,
+              `${monthStat.percentage}%`
+            ])
+          })
+        })
+        
+        autoTable(doc, {
+          head: [['Staff Name', 'Month', 'Days Checked In', 'Attendance Rate']],
+          body: staffStatsData,
+          startY: statsStartY + 4,
+          styles: { fontSize: 8 },
+          headStyles: { fillColor: [14, 165, 233] }, // Sky blue
+          margin: { left: 14, right: 14 }
+        })
+        
+        statsStartY = (doc as any).lastAutoTable.finalY + 10
+      }
+      
+      // Add Monthly Statistics Summary (overall)
+      if (monthlyStats.length > 0) {
+        doc.setFontSize(12)
+        doc.text('Monthly Statistics', 14, statsStartY)
+        
+        const statsData = monthlyStats.map(stat => [
+          stat.month,
+          stat.count.toString(),
+          stat.completed.toString(),
+          (stat.count - stat.completed).toString(),
+          `${Math.round((stat.completed / stat.count) * 100)}%`
+        ])
+        
+        autoTable(doc, {
+          head: [['Month', 'Total Check-ins', 'Completed', 'Active', 'Completion Rate']],
+          body: statsData,
+          startY: statsStartY + 4,
+          styles: { fontSize: 8 },
+          headStyles: { fillColor: [16, 185, 129] }, // Green
+          margin: { left: 14, right: 14 }
+        })
+        
+        statsStartY = (doc as any).lastAutoTable.finalY + 10
       }
 
       // Prepare table data
@@ -353,16 +878,32 @@ export default function AttendanceBase({ role }: { role: string }) {
         record.check_in ? new Date(record.check_in).toLocaleTimeString() : '-',
         record.check_out ? new Date(record.check_out).toLocaleTimeString() : '-',
         calculateWorkHours(record.check_in, record.check_out),
+        record.distance_from_office ? `${record.distance_from_office}m (±${record.gps_accuracy || '?'}m)` : '-',
+        record.checkout_distance ? `${record.checkout_distance}m (±${record.checkout_gps_accuracy || '?'}m)` : '-',
         record.status.replace('_', ' ').toUpperCase()
       ])
 
+      // Add section header for detailed records
+      doc.setFontSize(12)
+      doc.text('Detailed Attendance Records', 14, monthlyStats.length > 0 ? statsStartY : (selectedStaff && selectedStaff !== 'all' ? 44 : 38))
+      
       // Generate table
       autoTable(doc, {
-        head: [['Date', 'Staff Name', 'Check-In', 'Check-Out', 'Work Hours', 'Status']],
+        head: [['Date', 'Staff', 'In', 'Out', 'Hours', 'In Loc', 'Out Loc', 'Status']],
         body: tableData,
-        startY: selectedStaff && selectedStaff !== 'all' ? 44 : 38,
-        styles: { fontSize: 9 },
+        startY: monthlyStats.length > 0 ? statsStartY + 4 : (selectedStaff && selectedStaff !== 'all' ? 50 : 44),
+        styles: { fontSize: 7 },
         headStyles: { fillColor: [59, 130, 246] }, // Primary blue
+        columnStyles: {
+          0: { cellWidth: 20 }, // Date
+          1: { cellWidth: 25 }, // Staff
+          2: { cellWidth: 18 }, // Check-In
+          3: { cellWidth: 18 }, // Check-Out
+          4: { cellWidth: 16 }, // Hours
+          5: { cellWidth: 30 }, // In Location
+          6: { cellWidth: 30 }, // Out Location
+          7: { cellWidth: 18 }, // Status
+        }
       })
 
       // Add footer
@@ -490,6 +1031,12 @@ export default function AttendanceBase({ role }: { role: string }) {
         })
 
         try {
+          console.log('🔄 Attempting check-in...', {
+            userId: session.user.id,
+            distance: Math.round(distance),
+            gpsAccuracy: Math.round(pos.coords.accuracy)
+          })
+
           const { data, error } = await supabase
             .from('attendance')
             .insert([
@@ -506,7 +1053,7 @@ export default function AttendanceBase({ role }: { role: string }) {
             .select()
 
           if (error) {
-            console.error('Check-in error details:', {
+            console.error('❌ Check-in error details:', {
               message: error.message,
               details: error.details,
               hint: error.hint,
@@ -515,13 +1062,40 @@ export default function AttendanceBase({ role }: { role: string }) {
             
             // User-friendly error messages
             if (error.code === '42P01') {
-              throw new Error('Attendance table not found. Please run the database setup script.')
+              throw new Error('Attendance table not found. Please run ATTENDANCE_FIX_ALL_ROLES.sql')
             } else if (error.code === '42501') {
-              throw new Error('Permission denied. Please check database policies.')
+              throw new Error('Permission denied. Please run ATTENDANCE_FIX_ALL_ROLES.sql in Supabase SQL Editor.')
             } else if (error.message?.includes('attendance_status_check') || error.message?.includes('check constraint')) {
-              throw new Error('Database constraint error. Please run FIX_ATTENDANCE_STATUS_CONSTRAINT.sql in Supabase.')
+              throw new Error('Database constraint error. Please run ATTENDANCE_FIX_ALL_ROLES.sql')
             } else {
               throw new Error(error.message || 'Failed to record attendance')
+            }
+          }
+
+          console.log('✅ Check-in successful! Data returned:', data)
+
+          // Immediately set today's record with the returned data
+          if (data && data.length > 0) {
+            const newRecord = data[0] as AttendanceRecord
+            console.log('📝 Setting todayRecord state with:', newRecord)
+            setTodayRecord(newRecord)
+            console.log('✅ todayRecord state updated!')
+          } else {
+            console.warn('⚠️ No data returned from insert, will fetch manually')
+            // Fetch the record we just created
+            const today = new Date().toISOString().split('T')[0]
+            const { data: fetchedData } = await supabase
+              .from('attendance')
+              .select('*')
+              .eq('user_id', session.user.id)
+              .gte('created_at', `${today}T00:00:00`)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .single()
+            
+            if (fetchedData) {
+              console.log('📝 Fetched today record:', fetchedData)
+              setTodayRecord(fetchedData as AttendanceRecord)
             }
           }
 
@@ -529,14 +1103,30 @@ export default function AttendanceBase({ role }: { role: string }) {
             `✅ Checked in successfully!\n\n📍 Location verified: ${Math.round(distance)}m from office\n🎯 GPS accuracy: ±${Math.round(pos.coords.accuracy)}m`,
             { duration: 4000 }
           )
+          
           // Force refresh to ensure data is updated
+          console.log('🔄 Refreshing all attendance data...')
+          await fetchTodayRecord()
           await fetchAttendance()
+          
+          // Refresh currently checked-in list if CEO
+          if (canViewAllStaff()) {
+            await fetchCurrentlyCheckedIn()
+            console.log('🔄 Currently checked-in list refreshed')
+          }
+          
           // Small delay to ensure database is updated, then refetch again
           setTimeout(() => {
+            console.log('🔄 Final refresh...')
+            fetchTodayRecord()
             fetchAttendance()
+            if (canViewAllStaff()) {
+              fetchCurrentlyCheckedIn()
+            }
+            console.log('🔄 Refresh completed')
           }, 500)
         } catch (err: any) {
-          console.error('Check-in error:', err)
+          console.error('❌ Check-in error:', err)
           toast.error(err.message || 'Failed to check in')
         } finally {
           setCheckingIn(false)
@@ -683,10 +1273,11 @@ export default function AttendanceBase({ role }: { role: string }) {
           })
 
           try {
+            const checkOutTime = new Date().toISOString()
             const { error } = await supabase
               .from('attendance')
               .update({
-                check_out: new Date().toISOString(),
+                check_out: checkOutTime,
                 status: 'checked_out',
                 checkout_distance: Math.round(distance),
                 checkout_gps_accuracy: Math.round(pos.coords.accuracy),
@@ -703,15 +1294,44 @@ export default function AttendanceBase({ role }: { role: string }) {
               throw new Error(error.message || 'Failed to update attendance')
             }
 
+            console.log('✅ Check-out successful')
+
+            // Immediately update today's record with checkout data
+            if (todayRecord && todayRecord.id === lastRecord.id) {
+              setTodayRecord({
+                ...todayRecord,
+                check_out: checkOutTime,
+                status: 'checked_out',
+                checkout_distance: Math.round(distance),
+                checkout_gps_accuracy: Math.round(pos.coords.accuracy),
+              })
+              console.log('📝 Today record updated immediately with checkout')
+            }
+
             toast.success(
               `✅ Checked out successfully!\n\n📍 Location verified: ${Math.round(distance)}m from office\n🎯 GPS accuracy: ±${Math.round(pos.coords.accuracy)}m`,
               { duration: 4000 }
             )
+            
             // Force refresh to ensure data is updated
+            console.log('🔄 Refreshing all attendance data...')
+            await fetchTodayRecord()
             await fetchAttendance()
+            
+            // Refresh currently checked-in list if CEO
+            if (canViewAllStaff()) {
+              await fetchCurrentlyCheckedIn()
+              console.log('🔄 Currently checked-in list refreshed')
+            }
+            
             // Small delay to ensure database is updated, then refetch again
             setTimeout(() => {
+              fetchTodayRecord()
               fetchAttendance()
+              if (canViewAllStaff()) {
+                fetchCurrentlyCheckedIn()
+              }
+              console.log('🔄 Final refresh completed')
             }, 500)
           } catch (err: any) {
             console.error('Check-out error:', err)
@@ -771,18 +1391,24 @@ export default function AttendanceBase({ role }: { role: string }) {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-foreground">Smart Attendance</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">Track your work hours, breaks, and leave requests</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {canViewAllStaff() 
+              ? 'Monitor and manage staff attendance records' 
+              : 'Track your work hours, breaks, and leave requests'}
+          </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            onClick={() => setShowLeaveModal(true)}
-            variant="outline"
-            size="sm"
-            className="flex items-center gap-1.5 bg-primary/5 border-primary/30 hover:bg-primary/10"
-          >
-            <CalendarDaysIcon className="h-3.5 w-3.5" />
-            <span className="text-xs">Leave Request</span>
-          </Button>
+          {!canViewAllStaff() && (
+            <Button
+              onClick={() => setShowLeaveModal(true)}
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-1.5 bg-primary/5 border-primary/30 hover:bg-primary/10"
+            >
+              <CalendarDaysIcon className="h-3.5 w-3.5" />
+              <span className="text-xs">Leave Request</span>
+            </Button>
+          )}
           <Button
             onClick={() => setShowFilters(!showFilters)}
             variant="outline"
@@ -829,7 +1455,6 @@ export default function AttendanceBase({ role }: { role: string }) {
                   className="w-full px-2.5 py-1.5 text-sm border border-border rounded-md bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-transparent"
                 >
                   <option value="all">All Staff</option>
-                  <option value="self">My Attendance</option>
                   {staffMembers.map((staff) => (
                     <option key={staff.user_id} value={staff.user_id}>
                       {staff.name} ({staff.role})
@@ -894,10 +1519,11 @@ export default function AttendanceBase({ role }: { role: string }) {
         </div>
       )}
 
-      {/* Today's Attendance and Breaks Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Today's Status Card */}
-        <div className="bg-card border border-border rounded-lg p-4">
+      {/* Today's Attendance and Breaks Grid - Only for staff who need to check in/out */}
+      {!canViewAllStaff() && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Today's Status Card */}
+          <div className="bg-card border border-border rounded-lg p-4">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-1.5">
               <CalendarIcon className="h-4 w-4 text-primary" />
@@ -1000,11 +1626,297 @@ export default function AttendanceBase({ role }: { role: string }) {
           isCheckedIn={todayRecord?.status === 'checked_in'}
         />
       </div>
+      )}
+
+      {/* Currently Checked In - CEO Only */}
+      {canViewAllStaff() && (
+        <div className="bg-card border border-border rounded-lg p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-base font-semibold flex items-center gap-2">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+              </span>
+              Currently Checked In
+            </h2>
+            <span className="text-xs text-muted-foreground">
+              {currentlyCheckedIn.length} staff • Auto-updates every 30s
+            </span>
+          </div>
+
+          {currentlyCheckedIn.length === 0 ? (
+            <div className="text-center py-8 text-sm text-muted-foreground">
+              No staff currently checked in
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {currentlyCheckedIn.map((record) => (
+                <div 
+                  key={record.id} 
+                  className="bg-muted/30 border border-border rounded-lg p-3 hover:shadow-md transition-shadow"
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                        <span className="text-sm font-semibold text-primary">
+                          {record.profiles?.name?.charAt(0).toUpperCase() || 'U'}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold">{record.profiles?.name || 'Unknown'}</p>
+                        <p className="text-xs text-muted-foreground uppercase">{record.profiles?.role || 'staff'}</p>
+                      </div>
+                    </div>
+                    {record.activeBreak ? (
+                      <span className="px-2 py-1 bg-orange-100 text-orange-700 dark:bg-orange-900/20 dark:text-orange-300 rounded-full text-xs font-medium flex items-center gap-1">
+                        ☕ On Break
+                      </span>
+                    ) : (
+                      <span className="px-2 py-1 bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-300 rounded-full text-xs font-medium">
+                        Active
+                      </span>
+                    )}
+                  </div>
+                  
+                  {/* Break Status Alert (if on break) */}
+                  {record.activeBreak && (
+                    <div className="mb-2 px-2 py-1.5 bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-orange-900 dark:text-orange-100">
+                          {record.activeBreak.break_type === 'lunch' && '🍽️ Lunch Break'}
+                          {record.activeBreak.break_type === 'personal' && '🚻 Personal Break'}
+                          {record.activeBreak.break_type === 'regular' && '☕ Break'}
+                        </span>
+                        <span className="text-orange-600 dark:text-orange-400">
+                          {(() => {
+                            const now = new Date().getTime()
+                            const start = new Date(record.activeBreak.break_start).getTime()
+                            const diff = Math.floor((now - start) / (1000 * 60))
+                            return `${diff}m`
+                          })()}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div className="space-y-1.5 mt-3">
+                    <div className="flex items-center gap-2 text-xs">
+                      <ClockIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-muted-foreground">Check-in:</span>
+                      <span className="font-medium">
+                        {new Date(record.check_in).toLocaleTimeString('en-US', { 
+                          hour: '2-digit', 
+                          minute: '2-digit' 
+                        })}
+                      </span>
+                    </div>
+                    
+                    {record.distance_from_office !== undefined && record.distance_from_office !== null && (
+                      <div className="flex items-center gap-2 text-xs">
+                        <MapPinIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-muted-foreground">Distance:</span>
+                        <span className="font-medium">{record.distance_from_office}m from office</span>
+                      </div>
+                    )}
+                    
+                    {record.gps_accuracy !== undefined && record.gps_accuracy !== null && (
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="text-muted-foreground">GPS Accuracy:</span>
+                        <span className="font-medium">±{record.gps_accuracy}m</span>
+                      </div>
+                    )}
+                    
+                    {record.profiles?.email && (
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="text-muted-foreground">Email:</span>
+                        <span className="font-medium truncate">{record.profiles.email}</span>
+                      </div>
+                    )}
+                    
+                    {/* Break Summary */}
+                    {record.completedBreaks && record.completedBreaks.length > 0 && (
+                      <div className="flex items-center gap-2 text-xs pt-1.5 border-t border-border">
+                        <span className="text-muted-foreground">Breaks:</span>
+                        <span className="font-medium">
+                          {record.completedBreaks.length} completed
+                        </span>
+                        {record.totalBreakMinutes !== undefined && record.totalBreakMinutes > 0 && (
+                          <span className="text-primary font-semibold">
+                            • {(() => {
+                              const hours = Math.floor(record.totalBreakMinutes / 60)
+                              const mins = record.totalBreakMinutes % 60
+                              return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`
+                            })()}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Detailed Break List (collapsible or expandable) */}
+                  {record.allBreaks && record.allBreaks.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-border">
+                      <details className="text-xs">
+                        <summary className="cursor-pointer text-muted-foreground hover:text-foreground font-medium mb-1">
+                          Break Details ({record.allBreaks.length} total)
+                        </summary>
+                        <div className="space-y-1 mt-1.5 ml-2">
+                          {record.allBreaks.map((breakItem: any, idx: number) => {
+                            const isActive = !breakItem.break_end
+                            const duration = isActive 
+                              ? `${Math.floor((Date.now() - new Date(breakItem.break_start).getTime()) / (1000 * 60))}m (ongoing)`
+                              : breakItem.break_duration 
+                                ? `${breakItem.break_duration}m`
+                                : `${Math.floor((new Date(breakItem.break_end).getTime() - new Date(breakItem.break_start).getTime()) / (1000 * 60))}m`
+                            
+                            const breakIcon = breakItem.break_type === 'lunch' ? '🍽️' : breakItem.break_type === 'personal' ? '🚻' : '☕'
+                            
+                            return (
+                              <div 
+                                key={idx}
+                                className={`flex items-center justify-between px-2 py-1 rounded ${
+                                  isActive 
+                                    ? 'bg-orange-50 dark:bg-orange-950/20' 
+                                    : 'bg-muted/50'
+                                }`}
+                              >
+                                <span className="flex items-center gap-1">
+                                  <span>{breakIcon}</span>
+                                  <span className="capitalize">{breakItem.break_type}</span>
+                                  {isActive && (
+                                    <span className="px-1 py-0.5 bg-orange-200 dark:bg-orange-900 text-orange-800 dark:text-orange-200 rounded text-[9px] font-semibold">
+                                      NOW
+                                    </span>
+                                  )}
+                                </span>
+                                <span className={isActive ? 'text-orange-600 dark:text-orange-400 font-semibold' : 'text-green-600 dark:text-green-400 font-medium'}>
+                                  {duration}
+                                </span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </details>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Monthly Attendance Statistics */}
+      {monthlyStats.length > 0 && !canViewAllStaff() && (
+        <div className="bg-card border border-border rounded-lg p-4 mb-4">
+          <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
+            <span>📊</span>
+            Monthly Attendance Statistics
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {monthlyStats.map((stat) => (
+              <div
+                key={stat.month}
+                className="border border-border rounded-lg p-3 hover:bg-muted/40 transition-colors"
+              >
+                <div className="text-xs text-muted-foreground mb-1">{stat.month}</div>
+                <div className="flex items-baseline gap-2">
+                  <div className="text-2xl font-bold text-primary">{stat.count}</div>
+                  <div className="text-xs text-muted-foreground">check-ins</div>
+                </div>
+                <div className="mt-1.5 text-xs">
+                  <span className="text-green-600 font-medium">{stat.completed}</span>
+                  <span className="text-muted-foreground"> completed</span>
+                  {stat.count > stat.completed && (
+                    <>
+                      <span className="text-muted-foreground"> • </span>
+                      <span className="text-orange-600 font-medium">{stat.count - stat.completed}</span>
+                      <span className="text-muted-foreground"> active</span>
+                    </>
+                  )}
+                </div>
+                <div className="mt-2 h-1.5 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-green-500"
+                    style={{ width: `${(stat.completed / stat.count) * 100}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Per-Staff Monthly Attendance Statistics (CEO Only) */}
+      {canViewAllStaff() && staffMonthlyStats.length > 0 && (
+        <div className="bg-card border border-border rounded-lg p-4 mb-4">
+          <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
+            <span>📊</span>
+            Staff Monthly Attendance Statistics
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {staffMonthlyStats.map((staffStat) => (
+              <div
+                key={staffStat.userId}
+                className="border border-border rounded-lg p-4 hover:shadow-md transition-shadow"
+              >
+                <div className="mb-3">
+                  <h3 className="font-semibold text-sm truncate">{staffStat.staffName}</h3>
+                  <p className="text-xs text-muted-foreground truncate">{staffStat.staffEmail}</p>
+                </div>
+                <div className="space-y-3">
+                  {staffStat.stats.slice(0, 3).map((monthStat) => (
+                    <div
+                      key={monthStat.month}
+                      className="border border-border rounded-lg p-2.5 bg-muted/20"
+                    >
+                      <div className="text-xs text-muted-foreground mb-1">{monthStat.month}</div>
+                      <div className="flex items-baseline gap-1.5">
+                        <div className="text-lg font-bold text-primary">
+                          {monthStat.daysCheckedIn}/{monthStat.totalDays}
+                        </div>
+                        <div className="text-xs text-muted-foreground">days</div>
+                      </div>
+                      <div className="mt-1 text-xs">
+                        <span className={`font-medium ${
+                          monthStat.percentage >= 90 ? 'text-green-600' :
+                          monthStat.percentage >= 75 ? 'text-yellow-600' :
+                          'text-red-600'
+                        }`}>
+                          {monthStat.percentage}%
+                        </span>
+                        <span className="text-muted-foreground"> attendance</span>
+                      </div>
+                      <div className="mt-1.5 h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className={`h-full ${
+                            monthStat.percentage >= 90 ? 'bg-green-500' :
+                            monthStat.percentage >= 75 ? 'bg-yellow-500' :
+                            'bg-red-500'
+                          }`}
+                          style={{ width: `${monthStat.percentage}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                  {staffStat.stats.length > 3 && (
+                    <p className="text-xs text-center text-muted-foreground">
+                      +{staffStat.stats.length - 3} more months
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Attendance History */}
       <div className="bg-card border border-border rounded-lg p-4">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-semibold">Attendance History</h2>
+          <h2 className="text-base font-semibold">
+            {canViewAllStaff() ? 'Completed Records (Checked Out)' : 'Attendance History'}
+          </h2>
           {!showFilters && attendance.length > 0 && (
             <div className="flex items-center gap-1.5">
               <Button
@@ -1039,12 +1951,13 @@ export default function AttendanceBase({ role }: { role: string }) {
               <thead className="bg-muted text-muted-foreground uppercase text-xs">
                 <tr>
                   <th className="px-3 py-2 text-left">Date</th>
-                  {canViewAllStaff() && selectedStaff !== 'self' && (
+                  {canViewAllStaff() && (
                     <th className="px-3 py-2 text-left">Staff Name</th>
                   )}
                   <th className="px-3 py-2 text-left">Check-In</th>
                   <th className="px-3 py-2 text-left">Check-Out</th>
                   <th className="px-3 py-2 text-left">Work Hours</th>
+                  <th className="px-3 py-2 text-left">Location</th>
                   <th className="px-3 py-2 text-left">Status</th>
                 </tr>
               </thead>
@@ -1054,7 +1967,7 @@ export default function AttendanceBase({ role }: { role: string }) {
                     <td className="px-3 py-2.5 text-xs">
                       {new Date(record.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
                     </td>
-                    {canViewAllStaff() && selectedStaff !== 'self' && (
+                    {canViewAllStaff() && (
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-2">
                           <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center">
@@ -1078,6 +1991,35 @@ export default function AttendanceBase({ role }: { role: string }) {
                     <td className="px-3 py-2.5 text-xs font-medium">
                       {calculateWorkHours(record.check_in, record.check_out)}
                     </td>
+                    <td className="px-3 py-2.5 text-xs">
+                      <div className="space-y-1">
+                        {/* Check-in Location */}
+                        {record.distance_from_office !== null && record.distance_from_office !== undefined && (
+                          <div className="flex items-center gap-1 text-green-600">
+                            <span className="font-medium">In:</span>
+                            <span>{record.distance_from_office}m</span>
+                            {record.gps_accuracy !== null && record.gps_accuracy !== undefined && (
+                              <span className="text-muted-foreground">±{record.gps_accuracy}m</span>
+                            )}
+                          </div>
+                        )}
+                        {/* Check-out Location */}
+                        {record.checkout_distance !== null && record.checkout_distance !== undefined && (
+                          <div className="flex items-center gap-1 text-blue-600">
+                            <span className="font-medium">Out:</span>
+                            <span>{record.checkout_distance}m</span>
+                            {record.checkout_gps_accuracy !== null && record.checkout_gps_accuracy !== undefined && (
+                              <span className="text-muted-foreground">±{record.checkout_gps_accuracy}m</span>
+                            )}
+                          </div>
+                        )}
+                        {/* No location data */}
+                        {(record.distance_from_office === null || record.distance_from_office === undefined) &&
+                         (record.checkout_distance === null || record.checkout_distance === undefined) && (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-3 py-2.5">
                       <span
                         className={`px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -1097,12 +2039,14 @@ export default function AttendanceBase({ role }: { role: string }) {
         )}
       </div>
 
-      {/* Leave Request Modal */}
-      <LeaveRequestModal 
-        isOpen={showLeaveModal}
-        onClose={() => setShowLeaveModal(false)}
-        role={role}
-      />
+      {/* Leave Request Modal - Only for staff */}
+      {!canViewAllStaff() && (
+        <LeaveRequestModal 
+          isOpen={showLeaveModal}
+          onClose={() => setShowLeaveModal(false)}
+          role={role}
+        />
+      )}
     </div>
   )
 }

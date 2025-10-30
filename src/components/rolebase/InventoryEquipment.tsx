@@ -13,6 +13,7 @@ const supabase = createClient(
 type Equipment = {
   id: string
   name: string
+  quantity?: number
   model_number?: string
   category: string
   brand?: string
@@ -65,6 +66,7 @@ export default function EquipmentInventory() {
         .from('equipment_inventory')
         .update({
           name: formData.name,
+          quantity: formData.quantity || 0,
           category: categoryKey,
           model_number: formData.model_number,
           brand: formData.brand,
@@ -178,6 +180,7 @@ export default function EquipmentInventory() {
                       )}
                     >
                       <th className="p-3 font-medium">Name</th>
+                      <th className="p-3 font-medium">Quantity</th>
                       <th className="p-3 font-medium">Model No.</th>
                       <th className="p-3 font-medium">Brand</th>
                       <th className="p-3 font-medium">Status</th>
@@ -193,6 +196,7 @@ export default function EquipmentInventory() {
                           className="border-b border-border hover:bg-muted/30 transition-colors"
                         >
                           <td className="p-3">{item.name}</td>
+                          <td className="p-3 font-semibold">{item.quantity || '—'}</td>
                           <td className="p-3">{item.model_number || '—'}</td>
                           <td className="p-3">{item.brand || '—'}</td>
                           <td
@@ -233,7 +237,7 @@ export default function EquipmentInventory() {
                     ) : (
                       <tr>
                         <td
-                          colSpan={6}
+                          colSpan={7}
                           className="p-4 text-center text-muted-foreground"
                         >
                           No items in this category yet.
@@ -263,6 +267,14 @@ export default function EquipmentInventory() {
                 className="w-full px-3 py-2 rounded-md bg-background border border-border text-foreground"
                 value={formData.name || ''}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              />
+              <input
+                type="number"
+                placeholder="Quantity"
+                min="0"
+                className="w-full px-3 py-2 rounded-md bg-background border border-border text-foreground"
+                value={formData.quantity || ''}
+                onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) || 0 })}
               />
               <input
                 type="text"

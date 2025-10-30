@@ -68,3 +68,6 @@ FROM public.forum_comments;
 -- ✅ If all queries run successfully, forum is ready!
 -- =====================================================
 
+
+
+

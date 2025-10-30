@@ -4,3 +4,6 @@ export default function ManagerForumPage() {
   return <ForumBase role="manager" />
 }
 
+
+
+

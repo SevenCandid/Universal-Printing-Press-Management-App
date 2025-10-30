@@ -45,3 +45,6 @@ SELECT COUNT(*) as total_posts FROM forum_posts;
 -- First, get your user ID from the profiles table
 SELECT id, name, email FROM profiles LIMIT 5;
 
+
+
+

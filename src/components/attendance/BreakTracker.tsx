@@ -50,7 +50,8 @@ export default function BreakTracker({ attendanceId, userId, isCheckedIn }: Brea
             table: 'breaks',
             filter: `user_id=eq.${userId}`
           },
-          () => {
+          (payload) => {
+            console.log('🔔 Break change detected:', payload)
             fetchBreaks()
           }
         )
@@ -60,20 +61,27 @@ export default function BreakTracker({ attendanceId, userId, isCheckedIn }: Brea
         channel?.unsubscribe()
       }
     }
-  }, [userId, isCheckedIn])
+  }, [userId, isCheckedIn, supabase])
 
   const fetchBreaks = async () => {
     if (!supabase || !userId) return
 
     try {
-      const today = new Date().toISOString().split('T')[0]
+      const now = new Date()
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
+      
+      console.log('🔍 Fetching breaks for today:', {
+        start: todayStart.toISOString(),
+        end: todayEnd.toISOString()
+      })
       
       const { data, error } = await supabase
         .from('breaks')
         .select('*')
         .eq('user_id', userId)
-        .gte('created_at', `${today}T00:00:00`)
-        .lte('created_at', `${today}T23:59:59`)
+        .gte('break_start', todayStart.toISOString())
+        .lte('break_start', todayEnd.toISOString())
         .order('break_start', { ascending: false })
 
       if (error) {
@@ -81,18 +89,34 @@ export default function BreakTracker({ attendanceId, userId, isCheckedIn }: Brea
         if (error.code === '42P01') {
           console.warn('Breaks table not found. Run ATTENDANCE_BREAKS_AND_LEAVE_SETUP.sql')
           setTodayBreaks([])
+          setActiveBreak(null)
           return
         }
         throw error
       }
 
+      console.log('✅ Fetched breaks:', data?.length || 0, 'breaks')
+      if (data && data.length > 0) {
+        console.log('Break records:', data.map(b => ({
+          id: b.id.substring(0, 8),
+          type: b.break_type,
+          start: b.break_start,
+          end: b.break_end,
+          hasEnd: !!b.break_end
+        })))
+      }
+      
       setTodayBreaks(data || [])
       
-      // Find active break
+      // Find active break (one without break_end)
       const active = data?.find(b => !b.break_end)
+      console.log('🔍 Active break:', active ? `Found (ID: ${active.id.substring(0, 8)}, Type: ${active.break_type})` : 'None')
+      
+      // Always update activeBreak based on what we find
+      // This ensures UI stays in sync with database
       setActiveBreak(active || null)
     } catch (err) {
-      console.error('Fetch breaks error:', err)
+      console.error('❌ Fetch breaks error:', err)
     }
   }
 
@@ -104,6 +128,8 @@ export default function BreakTracker({ attendanceId, userId, isCheckedIn }: Brea
 
     setLoading(true)
     try {
+      console.log('🔄 Starting break...', { attendanceId, userId, breakType })
+      
       const { data, error } = await supabase
         .from('breaks')
         .insert([{
@@ -116,7 +142,7 @@ export default function BreakTracker({ attendanceId, userId, isCheckedIn }: Brea
         .single()
 
       if (error) {
-        console.error('Start break error details:', {
+        console.error('❌ Start break error details:', {
           message: error.message,
           details: error.details,
           hint: error.hint,
@@ -135,11 +161,35 @@ export default function BreakTracker({ attendanceId, userId, isCheckedIn }: Brea
         }
       }
 
-      setActiveBreak(data)
+      console.log('✅ Break started successfully:', data)
+      
       toast.success('☕ Break started')
-      fetchBreaks()
+      
+      // Immediately set the active break to prevent UI flicker
+      if (data) {
+        const breakData = data as Break
+        console.log('📝 Setting active break state:', {
+          id: breakData.id.substring(0, 8),
+          type: breakData.break_type,
+          start: breakData.break_start
+        })
+        setActiveBreak(breakData)
+        setTodayBreaks(prev => {
+          // Avoid duplicates
+          const filtered = prev.filter(b => b.id !== breakData.id)
+          return [breakData, ...filtered]
+        })
+        console.log('✅ Active break state set immediately')
+      }
+      
+      // Wait longer before refreshing to ensure database has propagated
+      setTimeout(async () => {
+        console.log('🔄 Refreshing breaks from database...')
+        await fetchBreaks()
+        console.log('✅ Breaks list refreshed from database')
+      }, 1500)
     } catch (err: any) {
-      console.error('Start break error:', err)
+      console.error('❌ Start break error:', err)
       toast.error(err.message || 'Failed to start break. Please ensure the database is set up correctly.')
     } finally {
       setLoading(false)
@@ -151,15 +201,23 @@ export default function BreakTracker({ attendanceId, userId, isCheckedIn }: Brea
 
     setLoading(true)
     try {
+      console.log('🔄 Ending break:', activeBreak.id)
+      
+      const endTime = new Date().toISOString()
+      const startTime = new Date(activeBreak.break_start).getTime()
+      const endTimeMs = new Date(endTime).getTime()
+      const durationMinutes = Math.floor((endTimeMs - startTime) / (1000 * 60))
+      
       const { error } = await supabase
         .from('breaks')
         .update({
-          break_end: new Date().toISOString()
+          break_end: endTime,
+          break_duration: durationMinutes
         })
         .eq('id', activeBreak.id)
 
       if (error) {
-        console.error('End break error details:', {
+        console.error('❌ End break error details:', {
           message: error.message,
           details: error.details,
           hint: error.hint,
@@ -168,11 +226,35 @@ export default function BreakTracker({ attendanceId, userId, isCheckedIn }: Brea
         throw new Error(error.message || 'Failed to end break')
       }
 
+      console.log('✅ Break ended successfully', {
+        duration: `${durationMinutes} minutes`,
+        start: activeBreak.break_start,
+        end: endTime
+      })
+      
+      // Update the break in todayBreaks list with end time and duration
+      setTodayBreaks(prev => prev.map(b => 
+        b.id === activeBreak.id 
+          ? { ...b, break_end: endTime, break_duration: durationMinutes }
+          : b
+      ))
+      
+      // Clear active break immediately
       setActiveBreak(null)
-      toast.success('✅ Break ended')
-      fetchBreaks()
+      
+      const hours = Math.floor(durationMinutes / 60)
+      const mins = durationMinutes % 60
+      const durationText = hours > 0 ? `${hours}h ${mins}m` : `${durationMinutes}m`
+      
+      toast.success(`✅ Break ended (${durationText})`)
+      
+      // Refresh breaks list after a delay
+      setTimeout(async () => {
+        console.log('🔄 Refreshing breaks list...')
+        await fetchBreaks()
+      }, 500)
     } catch (err: any) {
-      console.error('End break error:', err)
+      console.error('❌ End break error:', err)
       toast.error(err.message || 'Failed to end break')
     } finally {
       setLoading(false)
@@ -200,9 +282,18 @@ export default function BreakTracker({ attendanceId, userId, isCheckedIn }: Brea
   }
 
   const getTotalBreakTime = () => {
-    const total = todayBreaks.reduce((acc, b) => {
+    // Only count completed breaks (those with break_end)
+    const completedBreaks = todayBreaks.filter(b => b.break_end)
+    const total = completedBreaks.reduce((acc, b) => {
       if (b.break_duration) {
         return acc + b.break_duration
+      }
+      // Fallback calculation if break_duration not set
+      if (b.break_end) {
+        const duration = Math.floor(
+          (new Date(b.break_end).getTime() - new Date(b.break_start).getTime()) / (1000 * 60)
+        )
+        return acc + duration
       }
       return acc
     }, 0)
@@ -210,6 +301,7 @@ export default function BreakTracker({ attendanceId, userId, isCheckedIn }: Brea
     const hours = Math.floor(total / 60)
     const minutes = Math.round(total % 60)
     
+    if (total === 0) return '0m'
     if (hours > 0) {
       return `${hours}h ${minutes}m`
     }
@@ -244,8 +336,12 @@ export default function BreakTracker({ attendanceId, userId, isCheckedIn }: Brea
           <h3 className="text-base font-semibold">Break Tracker</h3>
         </div>
         {todayBreaks.length > 0 && (
-          <div className="text-xs text-muted-foreground">
-            Total: {getTotalBreakTime()}
+          <div className="text-xs">
+            <span className="text-muted-foreground">Total: </span>
+            <span className="font-semibold text-primary">{getTotalBreakTime()}</span>
+            <span className="text-muted-foreground ml-1">
+              ({todayBreaks.filter(b => b.break_end).length} completed)
+            </span>
           </div>
         )}
       </div>
@@ -309,28 +405,57 @@ export default function BreakTracker({ attendanceId, userId, isCheckedIn }: Brea
       {/* Today's Breaks List */}
       {todayBreaks.length > 0 && (
         <div className="pt-3 border-t border-border">
-          <h4 className="text-xs font-medium text-muted-foreground mb-2">Today's Breaks</h4>
+          <h4 className="text-xs font-medium text-muted-foreground mb-2">
+            Today's Breaks ({todayBreaks.length})
+          </h4>
           <div className="space-y-2 max-h-40 overflow-y-auto">
-            {todayBreaks.map((breakItem) => (
-              <div
-                key={breakItem.id}
-                className="flex items-center justify-between text-xs bg-muted/50 rounded p-2"
-              >
-                <div className="flex items-center space-x-2">
-                  <span>{getBreakTypeIcon(breakItem.break_type)}</span>
-                  <div>
-                    <p className="font-medium capitalize">{breakItem.break_type.replace('_', ' ')}</p>
-                    <p className="text-muted-foreground">
-                      {new Date(breakItem.break_start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                      {breakItem.break_end && ` - ${new Date(breakItem.break_end).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`}
-                    </p>
+            {todayBreaks.map((breakItem) => {
+              const isActive = !breakItem.break_end
+              const duration = formatBreakDuration(breakItem.break_start, breakItem.break_end)
+              
+              return (
+                <div
+                  key={breakItem.id}
+                  className={`flex items-center justify-between text-xs rounded p-2 ${
+                    isActive 
+                      ? 'bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800' 
+                      : 'bg-muted/50 border border-border'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2 flex-1">
+                    <span className="text-base">{getBreakTypeIcon(breakItem.break_type)}</span>
+                    <div className="flex-1">
+                      <p className="font-medium capitalize flex items-center gap-1.5">
+                        {breakItem.break_type.replace('_', ' ')}
+                        {isActive && (
+                          <span className="px-1.5 py-0.5 bg-orange-200 dark:bg-orange-900 text-orange-800 dark:text-orange-200 rounded text-[10px] font-semibold">
+                            ACTIVE
+                          </span>
+                        )}
+                        {!isActive && (
+                          <span className="px-1.5 py-0.5 bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300 rounded text-[10px] font-semibold">
+                            COMPLETED
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-muted-foreground mt-0.5">
+                        {new Date(breakItem.break_start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                        {breakItem.break_end && ` - ${new Date(breakItem.break_end).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right ml-2">
+                    <span className={`font-bold ${
+                      isActive 
+                        ? 'text-orange-600 dark:text-orange-400' 
+                        : 'text-green-600 dark:text-green-400'
+                    }`}>
+                      {duration}
+                    </span>
                   </div>
                 </div>
-                <span className="font-medium text-primary">
-                  {formatBreakDuration(breakItem.break_start, breakItem.break_end)}
-                </span>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}

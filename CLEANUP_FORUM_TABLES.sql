@@ -22,3 +22,6 @@ DROP TABLE IF EXISTS public.forum_posts CASCADE;
 -- Now run CREATE_FORUM_TABLES.sql
 -- =====================================================
 
+
+
+

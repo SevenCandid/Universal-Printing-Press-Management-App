@@ -88,3 +88,6 @@ SELECT
 FROM information_schema.triggers
 WHERE trigger_name = 'trigger_notify_new_forum_post';
 
+
+
+

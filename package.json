@@ -1,5 +1,5 @@
 {
-  "name": "universal-printing-press-app",
+  "name": "business-management-app",
   "version": "1.0.0",
   "scripts": {
     "dev": "next dev",
