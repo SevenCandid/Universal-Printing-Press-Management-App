@@ -77,7 +77,7 @@ export function Logo({ size = 'md', showText = true, className = '' }: LogoProps
     <div className={`flex items-center ${spacingClasses[size]} ${className}`}>
       <div className={`${sizeClasses[size]} rounded-lg bg-primary/10 p-1 flex items-center justify-center overflow-hidden shadow-sm border border-primary/20`}>
         <Image
-          src="/UPPLOGO.png"
+          src="/assets/logo/UPPLOGO.png"
           alt="Universal Printing Press Logo"
           width={imageSize[size]}
           height={imageSize[size]}

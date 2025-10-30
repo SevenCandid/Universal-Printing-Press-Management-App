@@ -23,7 +23,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 
-const defaultAvatar = '/UPPLOGO.png'
+const defaultAvatar = '/assets/logo/UPPLOGO.png'
 
 const roleLinks: Record<string, { name: string; href: string }[]> = {
   ceo: [
