@@ -83,6 +83,7 @@ export function Logo({ size = 'md', showText = true, className = '' }: LogoProps
           height={imageSize[size]}
           className="object-contain"
           priority
+          unoptimized
         />
       </div>
       {showText && (
