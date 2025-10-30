@@ -82,4 +82,5 @@ temp/
 .vercel
 ".env.local" 
 ".env.local" 
-public/clear-sw.html 
+public/clear-sw.html
+.vercel-privacy.md 
