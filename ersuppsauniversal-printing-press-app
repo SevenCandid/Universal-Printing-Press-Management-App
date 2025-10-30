@@ -1,0 +1,19 @@
+[33mcommit 7f38b962f252122824e5da9a52d3161a634cf76d[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m)[m
+Author: Seven Candid <candidtech07@gmail.com>
+Date:   Thu Oct 30 15:00:17 2025 +0000
+
+    Remove PNG files from Git LFS for Vercel auto-deploy compatibility
+
+ .gitattributes                   |   4 [32m+[m[31m---[m
+ public/UPPLOGO.png               | Bin [31m131[m -> [32m543932[m bytes
+ public/apple-icon.png            | Bin [31m131[m -> [32m190110[m bytes
+ public/assets/logo/UPPLOGO.png   | Bin [31m131[m -> [32m543932[m bytes
+ public/assets/logo/logo-dark.png | Bin [31m131[m -> [32m543932[m bytes
+ public/assets/logo/logo.png      | Bin [31m131[m -> [32m543932[m bytes
+ public/icon.png                  | Bin [31m130[m -> [32m39748[m bytes
+ public/icons/icon-192x192.png    | Bin [31m130[m -> [32m39748[m bytes
+ public/icons/icon-512x512.png    | Bin [31m131[m -> [32m190110[m bytes
+ public/icons/maskable_icon.png   | Bin [31m131[m -> [32m156833[m bytes
+ public/logo-dark.png             | Bin [31m131[m -> [32m543932[m bytes
+ public/logo.png                  | Bin [31m131[m -> [32m543932[m bytes
+ 12 files changed, 1 insertion(+), 3 deletions(-)
