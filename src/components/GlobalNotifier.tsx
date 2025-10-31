@@ -229,24 +229,45 @@ export default function GlobalNotifier({ children }: { children?: ReactNode }) {
   }
 
   const clearNotification = async (id: string) => {
-    // Remove locally
-    setNotifications((prev) => {
-      const updated = prev.filter((n) => n.id !== id)
-      const unreadCount = updated.filter((n) => !n.read).length
-      updateBadgeCount(unreadCount)
-      return updated
-    })
-    
-    // Delete from database
+    // Delete from database first (before updating local state)
     if (supabase) {
       try {
-        await supabase
+        const { error, data } = await supabase
           .from('notifications')
           .delete()
           .eq('id', id)
+          .select()
+        
+        if (error) {
+          console.error('Error deleting notification:', error)
+          // Show error to user
+          if (error.code === '42501' || error.message.includes('permission')) {
+            console.error('Permission denied: DELETE policy may be missing on notifications table')
+          }
+          // Don't remove from local state if delete failed
+          return
+        }
+        
+        // Only remove locally if database delete succeeded
+        setNotifications((prev) => {
+          const updated = prev.filter((n) => n.id !== id)
+          const unreadCount = updated.filter((n) => !n.read).length
+          updateBadgeCount(unreadCount)
+          return updated
+        })
       } catch (err) {
         console.error('Error deleting notification:', err)
+        // Don't remove from local state if delete failed
+        return
       }
+    } else {
+      // If no supabase, still remove locally (for offline mode)
+      setNotifications((prev) => {
+        const updated = prev.filter((n) => n.id !== id)
+        const unreadCount = updated.filter((n) => !n.read).length
+        updateBadgeCount(unreadCount)
+        return updated
+      })
     }
   }
 

@@ -19,6 +19,7 @@ import {
   UserCircle, // Customers icon
   FolderOpen, // Files icon
   BookOpen, // Handbook icon
+  FileText, // Company Handbook icon
   Clock, // Attendance icon
   Receipt, // Expenses icon
   MessagesSquare, // Forum icon
@@ -56,7 +57,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     { name: 'Expenses', href: `/${r}/expenses`, icon: Receipt },
     { name: 'Reports', href: `/${r}/reports`, icon: BarChart3 },
     { name: 'Forum', href: `/${r}/forum`, icon: MessagesSquare },
-    { name: 'Handbook', href: `/${r}/handbook`, icon: BookOpen },
+    { name: 'App Handbook', href: `/${r}/handbook`, icon: BookOpen },
+    { name: 'UPP Handbook', href: `/${r}/company-handbook`, icon: FileText },
   ]
 
   // ✅ Merge roleNav overrides (preserve structure)

@@ -200,7 +200,7 @@ export default function HandbookBase({ role }: { role: string }) {
                 {showMobileTOC ? 'Hide' : 'Menu'}
               </button>
               <span className="hidden sm:block px-2 py-1 bg-primary/10 text-primary text-[10px] font-medium rounded-full">
-                v3.0
+                v1.0
               </span>
             </div>
           </div>
@@ -1287,7 +1287,7 @@ export default function HandbookBase({ role }: { role: string }) {
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-3">
-                    Last updated: October 27, 2025 • Version 3.0
+                    Last updated: October 27, 2025 • Version 1.0
                   </p>
                 </div>
               </div>

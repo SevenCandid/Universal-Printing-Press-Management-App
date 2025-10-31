@@ -13,7 +13,8 @@ import {
   ArrowDownTrayIcon,
   FunnelIcon,
   UserGroupIcon,
-  CalendarDaysIcon
+  CalendarDaysIcon,
+  ExclamationCircleIcon
 } from '@heroicons/react/24/outline'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -88,6 +89,25 @@ type StaffMember = {
   role: string
 }
 
+type LeaveRequest = {
+  id: string
+  user_id: string
+  request_type: string
+  start_date: string
+  end_date: string
+  reason: string
+  status: string
+  reviewed_by?: string
+  reviewed_at?: string
+  reviewer_comments?: string
+  created_at: string
+  requester_name?: string
+  requester_email?: string
+  requester_role?: string
+  reviewer_name?: string
+  days_requested?: number
+}
+
 export default function AttendanceBase({ role }: { role: string }) {
   const { supabase, session } = useSupabase()
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([])
@@ -118,6 +138,12 @@ export default function AttendanceBase({ role }: { role: string }) {
   
   // Leave request modal
   const [showLeaveModal, setShowLeaveModal] = useState(false)
+  
+  // 🗓️ Leave Request Management (CEO only)
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([])
+  const [leaveRequestFilter, setLeaveRequestFilter] = useState<'pending' | 'all' | 'approved' | 'rejected'>('pending')
+  const [processingRequest, setProcessingRequest] = useState<string | null>(null)
+  const [showLeaveRequests, setShowLeaveRequests] = useState(false)
 
   // Helper: Check if user can view all staff (CEO only)
   const canViewAllStaff = () => role === 'ceo'
@@ -248,6 +274,7 @@ export default function AttendanceBase({ role }: { role: string }) {
       if (canViewAllStaff()) {
         fetchStaffMembers()
         fetchCurrentlyCheckedIn()
+        fetchLeaveRequests()
       }
     }
   }, [session])
@@ -262,6 +289,13 @@ export default function AttendanceBase({ role }: { role: string }) {
       }
     }
   }, [periodFilter, selectedStaff, customStartDate, customEndDate])
+  
+  // Refetch leave requests when filter changes
+  useEffect(() => {
+    if (canViewAllStaff() && session?.user) {
+      fetchLeaveRequests()
+    }
+  }, [leaveRequestFilter])
   
   // Auto-refresh currently checked-in staff every 30 seconds (for CEO)
   useEffect(() => {
@@ -1385,6 +1419,123 @@ export default function AttendanceBase({ role }: { role: string }) {
     return `${hours}h ${minutes}m`
   }
 
+  // 🗓️ Fetch leave requests (CEO only)
+  const fetchLeaveRequests = async () => {
+    if (!supabase || !canViewAllStaff()) return
+
+    try {
+      let query = supabase
+        .from('leave_requests_detailed')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      // Apply filter
+      if (leaveRequestFilter !== 'all') {
+        query = query.eq('status', leaveRequestFilter)
+      }
+
+      const { data, error } = await query
+
+      if (error) {
+        if (error.code === '42P01') {
+          // Table doesn't exist, silently fail
+          console.warn('Leave requests table not found. Run ATTENDANCE_BREAKS_AND_LEAVE_SETUP.sql')
+          setLeaveRequests([])
+          return
+        }
+        throw error
+      }
+
+      setLeaveRequests((data || []) as LeaveRequest[])
+    } catch (err: any) {
+      console.error('Fetch leave requests error:', err)
+      toast.error('Failed to load leave requests')
+    }
+  }
+
+  // 🗓️ Handle approve/reject leave request
+  const handleLeaveRequestAction = async (
+    requestId: string,
+    action: 'approved' | 'rejected',
+    comments?: string
+  ) => {
+    if (!supabase || !session?.user) return
+
+    setProcessingRequest(requestId)
+    try {
+      const updateData: any = {
+        status: action,
+        reviewed_by: session.user.id,
+        reviewed_at: new Date().toISOString(),
+      }
+
+      if (comments) {
+        updateData.reviewer_comments = comments.trim()
+      }
+
+      const { error } = await supabase
+        .from('leave_requests')
+        .update(updateData)
+        .eq('id', requestId)
+
+      if (error) throw error
+
+      toast.success(`✅ Request ${action === 'approved' ? 'approved' : 'rejected'}`)
+      
+      // Refresh leave requests
+      await fetchLeaveRequests()
+      
+      // Create notification for the requester
+      const request = leaveRequests.find(r => r.id === requestId)
+      if (request) {
+        try {
+          await supabase.from('notifications').insert({
+            title: action === 'approved' ? '✅ Leave Request Approved' : '❌ Leave Request Rejected',
+            message: `Your ${request.request_type.replace('_', ' ')} request (${new Date(request.start_date).toLocaleDateString()} - ${new Date(request.end_date).toLocaleDateString()}) has been ${action === 'approved' ? 'approved' : 'rejected'}`,
+            type: 'leave_update',
+            link: '/attendance',
+            user_role: 'all',
+            read: false,
+          })
+        } catch (notifErr) {
+          // Silently fail if notifications don't work
+          console.warn('Failed to create notification:', notifErr)
+        }
+      }
+    } catch (err: any) {
+      console.error('Leave request action error:', err)
+      toast.error(err.message || `Failed to ${action} request`)
+    } finally {
+      setProcessingRequest(null)
+    }
+  }
+
+  // Helper: Get request type emoji
+  const getRequestTypeEmoji = (type: string) => {
+    switch (type) {
+      case 'holiday': return '🏖️'
+      case 'sick_leave': return '🤒'
+      case 'emergency': return '🚨'
+      case 'personal': return '👤'
+      case 'excuse': return '📝'
+      default: return '📅'
+    }
+  }
+
+  // Helper: Get status badge color
+  const getStatusBadgeColor = (status: string) => {
+    switch (status) {
+      case 'approved':
+        return 'bg-green-50 text-green-700 border-green-200 dark:bg-green-950/20 dark:text-green-400 dark:border-green-800'
+      case 'rejected':
+        return 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/20 dark:text-red-400 dark:border-red-800'
+      case 'cancelled':
+        return 'bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-950/20 dark:text-gray-400 dark:border-gray-800'
+      default:
+        return 'bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-950/20 dark:text-yellow-400 dark:border-yellow-800'
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -1626,6 +1777,236 @@ export default function AttendanceBase({ role }: { role: string }) {
           isCheckedIn={todayRecord?.status === 'checked_in'}
         />
       </div>
+      )}
+
+      {/* 🗓️ Leave Requests Management - CEO Only */}
+      {canViewAllStaff() && (
+        <div className="bg-card border border-border rounded-lg p-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <CalendarDaysIcon className="h-5 w-5 text-primary" />
+              <h2 className="text-base font-semibold">Leave Requests Management</h2>
+            </div>
+            <Button
+              onClick={() => setShowLeaveRequests(!showLeaveRequests)}
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-1.5 h-7 text-xs"
+            >
+              {showLeaveRequests ? 'Hide' : 'Show'} Requests
+              {leaveRequests.filter(r => r.status === 'pending').length > 0 && (
+                <span className="ml-1 px-1.5 py-0.5 bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400 rounded-full text-[10px] font-bold">
+                  {leaveRequests.filter(r => r.status === 'pending').length}
+                </span>
+              )}
+            </Button>
+          </div>
+
+          {showLeaveRequests && (
+            <>
+              {/* Filter Tabs */}
+              <div className="flex gap-2 mb-4 border-b border-border">
+                {(['pending', 'all', 'approved', 'rejected'] as const).map((filter) => (
+                  <button
+                    key={filter}
+                    onClick={() => setLeaveRequestFilter(filter)}
+                    className={`px-3 py-2 text-xs font-medium transition-colors border-b-2 ${
+                      leaveRequestFilter === filter
+                        ? 'border-primary text-primary'
+                        : 'border-transparent text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {filter === 'pending' && (
+                      <span className="relative">
+                        Pending
+                        {leaveRequests.filter(r => r.status === 'pending').length > 0 && (
+                          <span className="ml-1.5 px-1.5 py-0.5 bg-yellow-500 text-white rounded-full text-[10px]">
+                            {leaveRequests.filter(r => r.status === 'pending').length}
+                          </span>
+                        )}
+                      </span>
+                    )}
+                    {filter === 'all' && 'All Requests'}
+                    {filter === 'approved' && 'Approved'}
+                    {filter === 'rejected' && 'Rejected'}
+                  </button>
+                ))}
+              </div>
+
+              {/* Leave Requests List */}
+              {leaveRequests.length === 0 ? (
+                <div className="text-center py-12">
+                  <CalendarDaysIcon className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
+                  <p className="text-muted-foreground text-sm">
+                    {leaveRequestFilter === 'pending'
+                      ? 'No pending leave requests'
+                      : `No ${leaveRequestFilter} leave requests`}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {leaveRequests.map((request) => {
+                    const daysRequested = request.days_requested || 
+                      Math.ceil((new Date(request.end_date).getTime() - new Date(request.start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1
+                    const isPending = request.status === 'pending'
+                    
+                    return (
+                      <div
+                        key={request.id}
+                        className={`border rounded-lg p-4 transition-all ${
+                          isPending
+                            ? 'border-primary/30 bg-primary/5 hover:border-primary/50'
+                            : 'border-border bg-card hover:bg-muted/30'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center gap-3 flex-1">
+                            <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-lg font-semibold">
+                              {request.requester_name?.charAt(0).toUpperCase() || 'U'}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <h4 className="font-semibold text-sm truncate">
+                                  {request.requester_name || 'Unknown'}
+                                </h4>
+                                <span className="text-2xl">{getRequestTypeEmoji(request.request_type)}</span>
+                              </div>
+                              <p className="text-xs text-muted-foreground truncate">
+                                {request.requester_email || ''}
+                              </p>
+                              {request.requester_role && (
+                                <span className="inline-block mt-1 px-2 py-0.5 bg-muted text-xs rounded-full">
+                                  {request.requester_role}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${getStatusBadgeColor(request.status)}`}>
+                            {request.status.toUpperCase()}
+                          </span>
+                        </div>
+
+                        {/* Request Details */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                          <div className="bg-background rounded-md p-2 border border-border">
+                            <p className="text-xs text-muted-foreground mb-1">Type</p>
+                            <p className="text-sm font-medium capitalize">
+                              {request.request_type.replace('_', ' ')}
+                            </p>
+                          </div>
+                          <div className="bg-background rounded-md p-2 border border-border">
+                            <p className="text-xs text-muted-foreground mb-1">Start Date</p>
+                            <p className="text-sm font-medium">
+                              {new Date(request.start_date).toLocaleDateString('en-US', { 
+                                month: 'short', 
+                                day: 'numeric', 
+                                year: 'numeric' 
+                              })}
+                            </p>
+                          </div>
+                          <div className="bg-background rounded-md p-2 border border-border">
+                            <p className="text-xs text-muted-foreground mb-1">End Date</p>
+                            <p className="text-sm font-medium">
+                              {new Date(request.end_date).toLocaleDateString('en-US', { 
+                                month: 'short', 
+                                day: 'numeric', 
+                                year: 'numeric' 
+                              })}
+                            </p>
+                          </div>
+                          <div className="bg-background rounded-md p-2 border border-border">
+                            <p className="text-xs text-muted-foreground mb-1">Duration</p>
+                            <p className="text-sm font-medium">
+                              {daysRequested} {daysRequested === 1 ? 'day' : 'days'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Reason */}
+                        <div className="bg-background rounded-md p-3 mb-3 border border-border">
+                          <p className="text-xs font-medium text-muted-foreground mb-1.5">Reason:</p>
+                          <p className="text-sm text-foreground leading-relaxed">{request.reason}</p>
+                        </div>
+
+                        {/* Reviewer Comments (if reviewed) */}
+                        {request.reviewer_comments && (
+                          <div className="bg-muted/50 rounded-md p-3 mb-3 border border-border">
+                            <div className="flex items-center gap-2 mb-1.5">
+                              <span className="text-xs font-medium text-muted-foreground">
+                                {request.reviewer_name ? `${request.reviewer_name}'s Comment:` : 'Manager Comment:'}
+                              </span>
+                              {request.reviewed_at && (
+                                <span className="text-xs text-muted-foreground">
+                                  ({new Date(request.reviewed_at).toLocaleDateString()})
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm text-foreground">{request.reviewer_comments}</p>
+                          </div>
+                        )}
+
+                        {/* Action Buttons (for pending requests) */}
+                        {isPending && (
+                          <div className="flex gap-2 pt-3 border-t border-border">
+                            <Button
+                              onClick={() => {
+                                const comments = prompt('Add optional comments (or leave blank):')
+                                if (comments !== null) {
+                                  handleLeaveRequestAction(request.id, 'approved', comments || undefined)
+                                }
+                              }}
+                              disabled={processingRequest === request.id}
+                              size="sm"
+                              className="flex-1 bg-green-600 hover:bg-green-700 text-white h-8"
+                            >
+                              <CheckCircleIcon className="h-4 w-4 mr-1.5" />
+                              {processingRequest === request.id ? 'Processing...' : 'Approve'}
+                            </Button>
+                            <Button
+                              onClick={() => {
+                                const comments = prompt('Add optional reason for rejection (or leave blank):')
+                                if (comments !== null) {
+                                  handleLeaveRequestAction(request.id, 'rejected', comments || undefined)
+                                }
+                              }}
+                              disabled={processingRequest === request.id}
+                              size="sm"
+                              variant="outline"
+                              className="flex-1 text-red-600 border-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 h-8"
+                            >
+                              <XCircleIcon className="h-4 w-4 mr-1.5" />
+                              {processingRequest === request.id ? 'Processing...' : 'Reject'}
+                            </Button>
+                          </div>
+                        )}
+
+                        {/* Request Meta */}
+                        <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
+                          <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                            <ClockIcon className="h-3 w-3" />
+                            Submitted {new Date(request.created_at).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                            })} at {new Date(request.created_at).toLocaleTimeString('en-US', {
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </span>
+                          {request.reviewed_at && !isPending && (
+                            <span className="text-xs text-muted-foreground">
+                              Reviewed {new Date(request.reviewed_at).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </>
+          )}
+        </div>
       )}
 
       {/* Currently Checked In - CEO Only */}
