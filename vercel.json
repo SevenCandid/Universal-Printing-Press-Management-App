@@ -2,11 +2,13 @@
   "buildCommand": "npm run build",
   "outputDirectory": ".next",
   "framework": "nextjs",
+  "installCommand": "npm install",
   "github": {
-    "silent": true
+    "silent": true,
+    "autoDeployOnPush": true,
+    "autoJobCancelation": true
   },
   "env": {
-    "NEXT_PUBLIC_APP_NAME": "Business Management System"
+    "NEXT_PUBLIC_APP_NAME": "Universal Printing Press"
   }
 }
-

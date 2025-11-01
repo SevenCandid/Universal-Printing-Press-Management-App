@@ -71,13 +71,15 @@ export default function DashboardBase({ role }: { role: string }) {
       setData(formatted)
       const total = formatted.find((d) => d.summary_period === 'TOTAL')
       if (total) {
-        setTotals({
+        setTotals(prev => ({
           totalOrders: total.total_orders,
           totalRevenue: total.total_revenue,
           totalFull: total.total_full,
           totalPartial: total.total_partial,
           totalPending: total.total_pending,
-        })
+          totalExpenses: prev.totalExpenses, // Keep existing value
+          totalDebts: prev.totalDebts, // Keep existing value
+        }))
       }
       setLastUpdated(new Date())
     } catch (err) {
