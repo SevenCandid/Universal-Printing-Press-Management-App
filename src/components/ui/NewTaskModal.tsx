@@ -73,7 +73,7 @@ export function NewTaskModal({
         // ✅ CEO & Manager can assign to staff or manager
         if (role === 'ceo' || role === 'manager') {
           staffData = staffData?.filter(
-            (p) => (p.role === 'staff' || p.role === 'manager') && p.is_active
+            (p) => (p.role === 'staff' || p.role === 'intern' || p.role === 'sales_representative' || p.role === 'manager') && p.is_active
           )
         }
 
@@ -101,7 +101,7 @@ export function NewTaskModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (role === 'staff') {
+    if (role === 'staff' || role === 'intern' || role === 'sales_representative') {
       toast.error('You are not authorized to create tasks.')
       return
     }
@@ -155,8 +155,8 @@ export function NewTaskModal({
             </button>
           </div>
 
-          {/* ✅ Block staff from creating tasks */}
-          {role === 'staff' ? (
+          {/* ✅ Block staff, intern, and sales_representative from creating tasks */}
+          {role === 'staff' || role === 'intern' || role === 'sales_representative' ? (
             <div className="text-center py-8">
               <p className="text-muted-foreground">
                 🚫 You do not have permission to create or assign tasks.

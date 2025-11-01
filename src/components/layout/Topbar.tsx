@@ -30,6 +30,7 @@ const roleLinks: Record<string, { name: string; href: string }[]> = {
     { name: 'Dashboard', href: '/ceo/dashboard' },
     { name: 'Orders', href: '/ceo/orders' },
     { name: 'Tasks', href: '/ceo/tasks' },
+    { name: 'Sales Reports', href: '/ceo/sales-reports' },
     { name: 'Staff', href: '/ceo/staff' },
     { name: 'Reports', href: '/ceo/reports' },
   ],
@@ -50,6 +51,19 @@ const roleLinks: Record<string, { name: string; href: string }[]> = {
     { name: 'My Tasks', href: '/staff/tasks' },
     { name: 'Orders', href: '/staff/orders' },
     { name: 'Reports', href: '/staff/reports' },
+  ],
+  intern: [
+    { name: 'Dashboard', href: '/intern/dashboard' },
+    { name: 'My Tasks', href: '/intern/tasks' },
+    { name: 'Orders', href: '/intern/orders' },
+    { name: 'Reports', href: '/intern/reports' },
+  ],
+  sales_representative: [
+    { name: 'Dashboard', href: '/sales_representative/dashboard' },
+    { name: 'My Tasks', href: '/sales_representative/tasks' },
+    { name: 'Daily Reports', href: '/sales_representative/daily-reports' },
+    { name: 'Orders', href: '/sales_representative/orders' },
+    { name: 'Reports', href: '/sales_representative/reports' },
   ],
   board: [
     { name: 'Dashboard', href: '/board/dashboard' },

@@ -26,8 +26,8 @@ export default function SignupPage() {
     setLoading(true)
 
     try {
-      // Require staff ID only for manager, executive_assistant, and staff
-      if ((formData.role === 'staff' || formData.role === 'manager' || formData.role === 'executive_assistant') && !formData.staff_id.trim()) {
+      // Require staff ID only for manager, executive_assistant, staff, intern, and sales_representative
+      if ((formData.role === 'staff' || formData.role === 'manager' || formData.role === 'executive_assistant' || formData.role === 'intern' || formData.role === 'sales_representative') && !formData.staff_id.trim()) {
         toast.error('Staff ID is required for this role.')
         setLoading(false)
         return
@@ -41,7 +41,7 @@ export default function SignupPage() {
             name: formData.name.trim(),
             role: formData.role,
             staff_id:
-              formData.role === 'manager' || formData.role === 'executive_assistant' || formData.role === 'staff'
+              formData.role === 'manager' || formData.role === 'executive_assistant' || formData.role === 'staff' || formData.role === 'intern' || formData.role === 'sales_representative'
                 ? formData.staff_id.trim()
                 : null,
           },
@@ -57,7 +57,36 @@ export default function SignupPage() {
 
       if (!data?.user) {
         toast.error('No user returned. Please try again.')
+        setLoading(false)
         return
+      }
+
+      // ✅ The database trigger (SECURITY DEFINER) should create the profile automatically
+      // We'll wait for it and check, but won't manually insert to avoid RLS issues
+      // The trigger runs with elevated privileges and bypasses RLS
+      try {
+        // Wait 2 seconds for trigger to execute (trigger runs after INSERT on auth.users)
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        
+        // Check if profile was created by trigger
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, role, name')
+          .eq('id', data.user.id)
+          .maybeSingle()
+
+        if (profile) {
+          console.log('✅ Profile created successfully (by trigger)')
+          // Profile exists, signup successful
+        } else {
+          // Profile doesn't exist - trigger might have failed or user_metadata is missing
+          console.warn('⚠️ Profile not created by trigger. This might be okay - profile will be created on first login.')
+          // Don't try to manually insert - RLS will block it
+          // The login page will create the profile if it's missing
+        }
+      } catch (profileErr: any) {
+        console.error('Error checking for profile:', profileErr)
+        // Don't fail signup - trigger might have created it or will create on login
       }
 
       toast.success('✅ Account created! Please verify your email before logging in.')
@@ -105,9 +134,11 @@ export default function SignupPage() {
             <option value="manager">Manager</option>
             <option value="executive_assistant">Executive Assistant</option>
             <option value="staff">Staff</option>
+            <option value="intern">Intern</option>
+            <option value="sales_representative">Sales Representative</option>
           </select>
 
-          {(formData.role === 'manager' || formData.role === 'executive_assistant' || formData.role === 'staff') && (
+          {(formData.role === 'manager' || formData.role === 'executive_assistant' || formData.role === 'staff' || formData.role === 'intern' || formData.role === 'sales_representative') && (
             <input
               type="text"
               name="staff_id"

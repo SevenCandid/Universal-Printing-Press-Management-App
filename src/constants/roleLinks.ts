@@ -4,6 +4,7 @@ import {
   ClipboardDocumentListIcon,
   UsersIcon,
   ChartBarIcon,
+  DocumentChartBarIcon,
 } from '@heroicons/react/24/outline'
 
 export const roleNav: Record<
@@ -14,6 +15,7 @@ export const roleNav: Record<
     { name: 'Dashboard', href: '/ceo/dashboard', icon: HomeIcon },
     { name: 'Orders', href: '/ceo/orders', icon: DocumentTextIcon },
     { name: 'Tasks', href: '/ceo/tasks', icon: ClipboardDocumentListIcon },
+    { name: 'Sales Reports', href: '/ceo/sales-reports', icon: DocumentChartBarIcon },
     { name: 'Users', href: '/ceo/staff', icon: UsersIcon },
     { name: 'Reports', href: '/ceo/reports', icon: ChartBarIcon },
   ],
@@ -37,6 +39,21 @@ export const roleNav: Record<
     { name: 'Tasks', href: '/staff/tasks', icon: ClipboardDocumentListIcon },
     { name: 'Users', href: '/staff/staff', icon: UsersIcon },
     { name: 'Reports', href: '/staff/reports', icon: ChartBarIcon },
+  ],
+  intern: [
+    { name: 'Dashboard', href: '/intern/dashboard', icon: HomeIcon },
+    { name: 'Orders', href: '/intern/orders', icon: DocumentTextIcon },
+    { name: 'Tasks', href: '/intern/tasks', icon: ClipboardDocumentListIcon },
+    { name: 'Users', href: '/intern/staff', icon: UsersIcon },
+    { name: 'Reports', href: '/intern/reports', icon: ChartBarIcon },
+  ],
+  sales_representative: [
+    { name: 'Dashboard', href: '/sales_representative/dashboard', icon: HomeIcon },
+    { name: 'Orders', href: '/sales_representative/orders', icon: DocumentTextIcon },
+    { name: 'Tasks', href: '/sales_representative/tasks', icon: ClipboardDocumentListIcon },
+    { name: 'Daily Reports', href: '/sales_representative/daily-reports', icon: DocumentChartBarIcon },
+    { name: 'Users', href: '/sales_representative/staff', icon: UsersIcon },
+    { name: 'Reports', href: '/sales_representative/reports', icon: ChartBarIcon },
   ],
   board: [
     { name: 'Dashboard', href: '/board/dashboard', icon: HomeIcon },

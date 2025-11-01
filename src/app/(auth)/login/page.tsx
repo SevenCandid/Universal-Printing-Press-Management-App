@@ -14,6 +14,25 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [checkingSession, setCheckingSession] = useState(true)
   const [redirected, setRedirected] = useState(false)
+  const [currentSubText, setCurrentSubText] = useState(0)
+  const [showResendEmail, setShowResendEmail] = useState(false)
+  const [resendingEmail, setResendingEmail] = useState(false)
+  
+  const subTexts = [
+    'Login to access your dashboard',
+    'Manage your printing business efficiently',
+    'Track orders, customers, and revenue',
+    'Stay organized with our smart dashboard',
+  ]
+
+  // Rotating text effect
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentSubText((prev) => (prev + 1) % subTexts.length)
+    }, 3000) // Change text every 3 seconds
+
+    return () => clearInterval(interval)
+  }, [subTexts.length])
 
   // ✅ Check for existing session and auto-redirect (for verified users)
   useEffect(() => {
@@ -85,7 +104,7 @@ export default function LoginPage() {
 
   // ✅ Redirect user based on their role
   const redirectToRole = (role: string) => {
-    const validRoles = ['ceo', 'manager', 'executive_assistant', 'staff', 'board']
+    const validRoles = ['ceo', 'manager', 'executive_assistant', 'staff', 'intern', 'sales_representative', 'board']
     const lower = role.toLowerCase()
     router.replace(validRoles.includes(lower) ? `/${lower}/dashboard` : '/')
   }
@@ -103,7 +122,40 @@ export default function LoginPage() {
 
       if (error) {
         console.error('Supabase login error:', error)
-        toast.error(error.message || 'Invalid credentials.')
+        
+        // Handle email confirmation error specifically
+        if (error.message?.includes('Email not confirmed') || error.message?.includes('email not confirmed')) {
+          toast.error('Please check your email and confirm your account before logging in. If you didn\'t receive the email, check your spam folder.', {
+            duration: 6000,
+          })
+          setShowResendEmail(true)
+          setLoading(false)
+          return
+        }
+        
+        // Handle invalid credentials with more helpful message
+        if (error.message?.includes('Invalid login credentials') || error.message?.includes('invalid')) {
+          toast.error('Invalid email or password. Please check your credentials and try again.', {
+            duration: 5000,
+          })
+          setLoading(false)
+          return
+        }
+        
+        // Handle rate limiting
+        if (error.message?.includes('rate limit') || error.message?.includes('too many')) {
+          toast.error('Too many login attempts. Please wait a few minutes and try again.', {
+            duration: 5000,
+          })
+          setLoading(false)
+          return
+        }
+        
+        // Generic error
+        toast.error(error.message || 'Login failed. Please check your credentials and try again.', {
+          duration: 5000,
+        })
+        setLoading(false)
         return
       }
 
@@ -170,6 +222,37 @@ export default function LoginPage() {
     }
   }
 
+  // Handle resend confirmation email
+  const handleResendConfirmation = async () => {
+    if (!formData.email.trim()) {
+      toast.error('Please enter your email address first')
+      return
+    }
+
+    setResendingEmail(true)
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: formData.email.trim(),
+        options: {
+          emailRedirectTo: `${window.location.origin}/login`,
+        },
+      })
+
+      if (error) {
+        toast.error(error.message || 'Failed to resend confirmation email')
+      } else {
+        toast.success('✅ Confirmation email sent! Please check your inbox.')
+        setShowResendEmail(false)
+      }
+    } catch (err: any) {
+      console.error('Resend confirmation error:', err)
+      toast.error('Failed to resend confirmation email')
+    } finally {
+      setResendingEmail(false)
+    }
+  }
+
   if (checkingSession) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
@@ -226,6 +309,30 @@ export default function LoginPage() {
             {loading ? 'Signing in...' : 'Login'}
           </button>
         </form>
+
+        {/* Resend Confirmation Email */}
+        {showResendEmail && (
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 space-y-3">
+            <p className="text-sm text-blue-900 dark:text-blue-100">
+              Didn't receive the confirmation email?
+            </p>
+            <button
+              type="button"
+              onClick={handleResendConfirmation}
+              disabled={resendingEmail}
+              className="w-full bg-blue-600 text-white rounded-md py-2 hover:bg-blue-700 transition text-sm disabled:opacity-50"
+            >
+              {resendingEmail ? 'Sending...' : 'Resend Confirmation Email'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowResendEmail(false)}
+              className="w-full text-xs text-blue-700 dark:text-blue-300 hover:underline"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
 
         {/* Footer Links */}
         <div className="text-center text-sm text-muted-foreground space-y-1">

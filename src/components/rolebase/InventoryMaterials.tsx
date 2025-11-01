@@ -48,6 +48,7 @@ type Purchase = {
 const categories = [
   { key: 'paper', name: 'Papers' },
   { key: 'ink', name: 'Inks & Toners' },
+  { key: 'MAGiCARD', name: 'MAGiCARD Materials' },
   { key: 'chemicals', name: 'Chemicals' },
   { key: 'embroidery', name: 'Embroidery Materials' },
   { key: 'sewing', name: 'Sewing & Neatning' },

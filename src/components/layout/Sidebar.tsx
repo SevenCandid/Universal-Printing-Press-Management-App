@@ -23,6 +23,7 @@ import {
   Clock, // Attendance icon
   Receipt, // Expenses icon
   MessagesSquare, // Forum icon
+  FileText as ReportIcon, // Sales Reports icon
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -45,21 +46,33 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   }, [mounted])
 
   // ✅ Default nav (same for all roles)
-  const defaultNav = (r: string) => [
-    { name: 'Dashboard', href: `/${r}/dashboard`, icon: LayoutDashboard },
-    { name: 'Orders', href: `/${r}/orders`, icon: ClipboardList },
-    { name: 'Customers', href: `/${r}/customers`, icon: UserCircle },
-    { name: 'Files', href: `/${r}/files`, icon: FolderOpen },
-    { name: 'Enquiries', href: `/${r}/enquiries`, icon: MessageSquare },
-    { name: 'Tasks', href: `/${r}/tasks`, icon: Briefcase },
-    { name: 'Users', href: `/${r}/staff`, icon: Users },
-    { name: 'Attendance', href: `/${r}/attendance`, icon: Clock },
-    { name: 'Expenses', href: `/${r}/expenses`, icon: Receipt },
-    { name: 'Reports', href: `/${r}/reports`, icon: BarChart3 },
-    { name: 'Forum', href: `/${r}/forum`, icon: MessagesSquare },
-    { name: 'App Handbook', href: `/${r}/handbook`, icon: BookOpen },
-    { name: 'UPP Handbook', href: `/${r}/company-handbook`, icon: FileText },
-  ]
+  const defaultNav = (r: string) => {
+    const baseNav = [
+      { name: 'Dashboard', href: `/${r}/dashboard`, icon: LayoutDashboard },
+      { name: 'Orders', href: `/${r}/orders`, icon: ClipboardList },
+      { name: 'Customers', href: `/${r}/customers`, icon: UserCircle },
+      { name: 'Files', href: `/${r}/files`, icon: FolderOpen },
+      { name: 'Enquiries', href: `/${r}/enquiries`, icon: MessageSquare },
+      { name: 'Tasks', href: `/${r}/tasks`, icon: Briefcase },
+      { name: 'Users', href: `/${r}/staff`, icon: Users },
+      { name: 'Attendance', href: `/${r}/attendance`, icon: Clock },
+      { name: 'Expenses', href: `/${r}/expenses`, icon: Receipt },
+      { name: 'Reports', href: `/${r}/reports`, icon: BarChart3 },
+      { name: 'Forum', href: `/${r}/forum`, icon: MessagesSquare },
+      { name: 'App Handbook', href: `/${r}/handbook`, icon: BookOpen },
+      { name: 'UPP Handbook', href: `/${r}/company-handbook`, icon: FileText },
+    ]
+
+    // Add role-specific pages
+    if (r === 'sales_representative') {
+      baseNav.splice(6, 0, { name: 'Daily Reports', href: `/${r}/daily-reports`, icon: ReportIcon })
+    }
+    if (r === 'ceo') {
+      baseNav.splice(6, 0, { name: 'Sales Reports', href: `/${r}/sales-reports`, icon: ReportIcon })
+    }
+
+    return baseNav
+  }
 
   // ✅ Merge roleNav overrides (preserve structure)
   const navigation =

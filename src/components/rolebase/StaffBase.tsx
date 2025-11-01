@@ -140,7 +140,7 @@ export default function StaffBase() {
     grouped[r].sort((a, b) => (a.is_active === b.is_active ? 0 : a.is_active ? -1 : 1))
   )
 
-  const rolesOrder = ['ceo', 'manager', 'executive_assistant', 'board', 'staff', 'unknown']
+  const rolesOrder = ['ceo', 'manager', 'executive_assistant', 'board', 'staff', 'intern', 'sales_representative', 'unknown']
 
   return (
     <div className="space-y-6 sm:space-y-8">
@@ -193,6 +193,8 @@ export default function StaffBase() {
                     executive_assistant: 'Executive Assistant(s)',
                     board: 'Board of Directors',
                     staff: 'Staff Members',
+                    intern: 'Intern(s)',
+                    sales_representative: 'Sales Representative(s)',
                     unknown: 'Others',
                   }[role] || role}
                 </h2>

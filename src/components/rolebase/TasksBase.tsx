@@ -88,7 +88,7 @@ export default function TasksPage() {
       `)
       .order('created_at', { ascending: false })
 
-    if (role === 'staff' && user) query = query.eq('assigned_to', user.id)
+    if ((role === 'staff' || role === 'intern' || role === 'sales_representative') && user) query = query.eq('assigned_to', user.id)
     if (statusFilter !== 'all') query = query.eq('status', statusFilter)
 
     const today = new Date()
@@ -149,7 +149,7 @@ export default function TasksPage() {
 
   const openEdit = (task: any) => {
     if (
-      (role === 'staff' || role === 'manager') &&
+      (role === 'staff' || role === 'intern' || role === 'sales_representative' || role === 'manager') &&
       task.assigned_to !== user?.id
     ) {
       toast.error('You can only update your own tasks.')

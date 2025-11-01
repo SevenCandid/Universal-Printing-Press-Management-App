@@ -3,7 +3,7 @@ export interface User {
   id: string
   name: string
   email: string
-  role: 'ceo' | 'manager' | 'staff'
+  role: 'ceo' | 'manager' | 'staff' | 'intern' | 'sales_representative'
   department?: string
 }
 
@@ -23,7 +23,9 @@ export const hasPermission = (user: User, permission: string): boolean => {
   const permissions = {
     ceo: ['view_all_orders', 'view_all_tasks', 'assign_tasks', 'manage_staff', 'view_reports'],
     manager: ['view_all_orders', 'view_all_tasks', 'assign_tasks', 'view_reports'],
-    staff: ['view_my_tasks', 'update_my_tasks']
+    staff: ['view_my_tasks', 'update_my_tasks'],
+    intern: ['view_my_tasks', 'update_my_tasks'],
+    sales_representative: ['view_my_tasks', 'update_my_tasks']
   }
 
   return permissions[user.role]?.includes(permission) || false

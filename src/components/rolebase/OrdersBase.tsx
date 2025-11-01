@@ -107,7 +107,7 @@ export default function OrdersPage() {
   const canEdit = () => ['ceo', 'manager', 'executive_assistant'].includes(profile?.role?.toLowerCase() || '')
   const canAssign = () => ['ceo', 'manager', 'executive_assistant'].includes(profile?.role?.toLowerCase() || '')
   const canAddNew = () =>
-    ['ceo', 'manager', 'executive_assistant', 'staff', 'board'].includes(profile?.role?.toLowerCase() || '')
+    ['ceo', 'manager', 'executive_assistant', 'staff', 'intern', 'sales_representative', 'board'].includes(profile?.role?.toLowerCase() || '')
   const isReadOnly = () => profile?.role?.toLowerCase() === 'board'
 
   // ====== Fetch profile ======

@@ -57,7 +57,7 @@ export async function middleware(req: NextRequest) {
   }
 
   if (path.startsWith('/tasks')) {
-    if (!['staff', 'manager', 'executive_assistant', 'ceo', 'board'].includes(role)) {
+    if (!['staff', 'intern', 'sales_representative', 'manager', 'executive_assistant', 'ceo', 'board'].includes(role)) {
       const redirectUrl = req.nextUrl.clone()
       redirectUrl.pathname = '/login'
       return NextResponse.redirect(redirectUrl)

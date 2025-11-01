@@ -64,6 +64,7 @@ export default function ReportsBase() {
   const [period, setPeriod] = useState<Period>('monthly')
   const [revenues, setRevenues] = useState<RevenueRow[]>([])
   const [expenses, setExpenses] = useState<ExpenseRow[]>([])
+  const [debts, setDebts] = useState<ExpenseRow[]>([])
   const [staffPerformance, setStaffPerformance] = useState<StaffPerfRow[]>([])
   const [userId, setUserId] = useState<string | null>(null)
   const [chartType, setChartType] = useState<'line' | 'bar'>('line')
@@ -122,30 +123,67 @@ export default function ReportsBase() {
 
   // Fetch Staff Performance
   const fetchStaffPerformance = useCallback(async () => {
-    if (!supabase || !userId) return
+    if (!supabase || !userId) {
+      console.log('Cannot fetch staff performance: supabase or userId missing', { supabase: !!supabase, userId })
+      return
+    }
+    
     try {
+      console.log('Fetching staff performance...', { period, userId })
       const { data: rpcData, error } = await supabase.rpc('get_staff_performance', {
         period_type: period,
         viewer_id: userId,
       })
-      if (error) throw error
-      if (Array.isArray(rpcData)) {
-        setStaffPerformance(
-          rpcData.map((r: any) => ({
-            staff_id: r.staff_id,
-            staff_name: r.staff_name ?? 'Unknown',
-            role: r.role ?? '',
-            total_tasks: Number(r.total_tasks ?? 0),
-            completed_tasks: Number(r.completed_tasks ?? 0),
-            pending_tasks: Number(r.pending_tasks ?? 0),
-            overdue_tasks: Number(r.overdue_tasks ?? 0),
-            completion_rate: Number(r.completion_rate ?? 0),
-          }))
-        )
+      
+      if (error) {
+        console.error('Staff performance RPC error:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        })
+        throw error
       }
-    } catch (err) {
-      console.error('fetchStaffPerformance error:', err)
-      toast.error('Could not load staff performance data.')
+      
+      if (Array.isArray(rpcData)) {
+        console.log('Staff performance data received:', rpcData.length, 'staff members')
+        const formatted = rpcData.map((r: any) => ({
+          staff_id: r.staff_id,
+          staff_name: r.staff_name ?? 'Unknown',
+          role: r.role ?? '',
+          total_tasks: Number(r.total_tasks ?? 0),
+          completed_tasks: Number(r.completed_tasks ?? 0),
+          pending_tasks: Number(r.pending_tasks ?? 0),
+          overdue_tasks: Number(r.overdue_tasks ?? 0),
+          completion_rate: Number(r.completion_rate ?? 0),
+        }))
+        
+        console.log('Formatted staff performance:', formatted)
+        setStaffPerformance(formatted)
+      } else {
+        console.warn('Staff performance data is not an array:', rpcData)
+        setStaffPerformance([])
+      }
+    } catch (err: any) {
+      console.error('fetchStaffPerformance error:', {
+        message: err?.message,
+        details: err?.details,
+        hint: err?.hint,
+        code: err?.code,
+        fullError: err
+      })
+      
+      const errorMessage = err?.message || String(err) || 'Unknown error'
+      if (errorMessage.includes('relation') && errorMessage.includes('does not exist')) {
+        toast.error('Staff performance function not found. Please run the database setup.')
+      } else if (errorMessage.includes('row-level security') || errorMessage.includes('permission denied')) {
+        toast.error('Access denied. Please check your permissions for staff performance.')
+      } else {
+        toast.error(`Could not load staff performance data: ${errorMessage}`)
+      }
+      
+      // Set empty array on error so UI doesn't break
+      setStaffPerformance([])
     }
   }, [supabase, period, userId])
 
@@ -174,16 +212,155 @@ export default function ReportsBase() {
   }, [supabase])
   // 🧾 EXPENSES INTEGRATION END
 
+  // 💳 DEBTS INTEGRATION START
+  // Fetch Debts - completed orders with pending payments
+  const fetchDebts = useCallback(async () => {
+    if (!supabase) return
+    try {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('total_amount, created_at, order_status, payment_status')
+        .eq('order_status', 'completed')
+        .ilike('payment_status', '%pending%')
+        .order('created_at', { ascending: false })
+      
+      if (error) throw error
+      
+      setDebts(
+        (data || []).map((d: any) => ({
+          amount: Number(d.total_amount ?? 0),
+          created_at: d.created_at ?? '',
+        }))
+      )
+    } catch (err) {
+      console.error('fetchDebts error:', err)
+      // Silent fail - debts might not be available yet
+    }
+  }, [supabase])
+  // 💳 DEBTS INTEGRATION END
+
   useEffect(() => {
     fetchRevenues()
     fetchStaffPerformance()
     fetchExpenses()
-  }, [fetchRevenues, fetchStaffPerformance, fetchExpenses])
+    fetchDebts()
+  }, [fetchRevenues, fetchStaffPerformance, fetchExpenses, fetchDebts])
+
+  // ✅ Realtime updates for staff performance - always keep data fresh
+  useEffect(() => {
+    if (!supabase || !userId) return
+    
+    // Fetch staff performance initially
+    fetchStaffPerformance()
+    
+    // Subscribe to realtime changes on tasks (affects staff performance)
+    const channel = supabase
+      .channel('staff-performance-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'tasks'
+        },
+        (payload) => {
+          console.log('Task change detected (affects staff performance):', payload.eventType)
+          // Refetch staff performance when tasks change
+          fetchStaffPerformance()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      try {
+        supabase.removeChannel(channel)
+      } catch {
+        // fallback for older SDKs
+        // @ts-ignore
+        channel?.unsubscribe?.()
+      }
+    }
+  }, [supabase, userId, period, fetchStaffPerformance])
+
+  // 💳 GROUP DEBTS BY PERIOD START (must be before chartContent)
+  const debtsByPeriod = useMemo(() => {
+    const grouped: Record<string, number> = {}
+    
+    debts.forEach((debt) => {
+      const date = new Date(debt.created_at)
+      let key = ''
+      
+      switch (period) {
+        case 'daily':
+          key = date.toISOString().split('T')[0] // YYYY-MM-DD
+          break
+        case 'weekly': {
+          const startOfWeek = new Date(date)
+          startOfWeek.setDate(date.getDate() - date.getDay())
+          key = startOfWeek.toISOString().split('T')[0]
+          break
+        }
+        case 'monthly':
+          key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+          break
+        case 'quarterly': {
+          const quarter = Math.floor(date.getMonth() / 3) + 1
+          key = `${date.getFullYear()}-Q${quarter}`
+          break
+        }
+        case 'halfyear': {
+          const half = date.getMonth() < 6 ? 'H1' : 'H2'
+          key = `${date.getFullYear()}-${half}`
+          break
+        }
+        case 'yearly':
+          key = String(date.getFullYear())
+          break
+      }
+      
+      grouped[key] = (grouped[key] || 0) + debt.amount
+    })
+    
+    return grouped
+  }, [debts, period])
+  // 💳 GROUP DEBTS BY PERIOD END
 
   // Chart - Mobile Responsive
   const chartContent = useMemo(() => {
-    if (!revenues.length) return null
-    const chartData = revenues.filter((r) => r.summary_period !== 'TOTAL')
+    if (!revenues.length && !debts.length) return null
+    let chartData = revenues.filter((r) => r.summary_period !== 'TOTAL')
+    
+    // Merge debts data into chart data by period
+    chartData = chartData.map((r) => {
+      const revenuePeriod = r.summary_period || ''
+      // Map revenue period format to debt period format (same as expenses)
+      let debtKey = revenuePeriod
+      
+      // Convert revenue period format to match debt period format
+      const now = new Date()
+      if (revenuePeriod.match(/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)$/i)) {
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        const monthIndex = monthNames.findIndex(m => m.toLowerCase() === revenuePeriod.toLowerCase())
+        if (monthIndex !== -1) {
+          debtKey = `${now.getFullYear()}-${String(monthIndex + 1).padStart(2, '0')}`
+        }
+      } else if (revenuePeriod.match(/^Q[1-4]$/i)) {
+        debtKey = `${now.getFullYear()}-${revenuePeriod.toUpperCase()}`
+      } else if (revenuePeriod.match(/^\d{4}$/)) {
+        debtKey = revenuePeriod
+      }
+      
+      const debtAmount = debtsByPeriod[debtKey] || 0
+      const periodRevenue = Number(r.total_revenue) || 0
+      const debtPercent = periodRevenue > 0 ? ((debtAmount / periodRevenue) * 100).toFixed(2) : 0
+      
+      return {
+        ...r,
+        total_debts: debtAmount,
+        total_debts_percent: Number(debtPercent),
+      }
+    })
+    
     const valueKey = (base: string) => (viewMode === 'percent' ? `${base}_percent` : base)
     const formatValue = (val: any) => (viewMode === 'percent' ? `${val}%` : `₵${Number(val).toLocaleString()}`)
 
@@ -208,6 +385,7 @@ export default function ReportsBase() {
             <Bar dataKey={valueKey('total_full_payments')} fill="#22c55e" name="Full" />
             <Bar dataKey={valueKey('total_partial_payments')} fill="#facc15" name="Partial" />
             <Bar dataKey={valueKey('total_pending')} fill="#ef4444" name="Pending" />
+            <Bar dataKey={valueKey('total_debts')} fill="#dc2626" name="Debts" />
           </BarChart>
         </ResponsiveContainer>
       )
@@ -233,10 +411,11 @@ export default function ReportsBase() {
           <Line type="monotone" dataKey={valueKey('total_full_payments')} stroke="#22c55e" strokeWidth={2} name="Full" />
           <Line type="monotone" dataKey={valueKey('total_partial_payments')} stroke="#facc15" strokeWidth={2} name="Partial" />
           <Line type="monotone" dataKey={valueKey('total_pending')} stroke="#ef4444" strokeWidth={2} name="Pending" />
+          <Line type="monotone" dataKey={valueKey('total_debts')} stroke="#dc2626" strokeWidth={2} name="Debts" />
         </LineChart>
       </ResponsiveContainer>
     )
-  }, [revenues, chartType, viewMode])
+  }, [revenues, debts, debtsByPeriod, chartType, viewMode])
 
   // 🧾 CALCULATE EXPENSES METRICS START
   const financialMetrics = useMemo(() => {
@@ -446,12 +625,14 @@ export default function ReportsBase() {
 
         const tableData = revenues.map((r) => {
           const periodExpense = expensesByPeriod[r.summary_period || ''] || 0
+          const periodDebt = debtsByPeriod[r.summary_period || ''] || 0
           const netRev = (r.total_revenue || 0) - periodExpense
           
           return [
             r.summary_period || '',
             `GHS ${(r.total_revenue || 0).toFixed(2)}`,
             `GHS ${periodExpense.toFixed(2)}`,
+            `GHS ${periodDebt.toFixed(2)}`,
             `GHS ${netRev.toFixed(2)}`,
             `GHS ${(r.total_full_payments || 0).toFixed(2)}`,
             `GHS ${(r.total_partial_payments || 0).toFixed(2)}`,
@@ -462,20 +643,21 @@ export default function ReportsBase() {
 
         autoTable(doc, {
           startY: yPos,
-          head: [['Period', 'Revenue (GHS)', 'Expenses (GHS)', 'Net (GHS)', 'Full Pay', 'Partial', 'Pending', 'Orders']],
+          head: [['Period', 'Revenue (GHS)', 'Expenses (GHS)', 'Debts (GHS)', 'Net (GHS)', 'Full Pay', 'Partial', 'Pending', 'Orders']],
           body: tableData,
           theme: 'striped',
           headStyles: { fillColor: [52, 152, 219], textColor: 255, fontStyle: 'bold', fontSize: 9 },
           styles: { fontSize: 8, cellPadding: 5, overflow: 'linebreak' },
           columnStyles: {
-            0: { cellWidth: 65 },
-            1: { cellWidth: 65, halign: 'right' },
-            2: { cellWidth: 65, halign: 'right' },
-            3: { cellWidth: 65, halign: 'right' },
+            0: { cellWidth: 60 },
+            1: { cellWidth: 60, halign: 'right' },
+            2: { cellWidth: 60, halign: 'right' },
+            3: { cellWidth: 60, halign: 'right' },
             4: { cellWidth: 60, halign: 'right' },
             5: { cellWidth: 55, halign: 'right' },
-            6: { cellWidth: 55, halign: 'right' },
-            7: { cellWidth: 45, halign: 'right' },
+            6: { cellWidth: 50, halign: 'right' },
+            7: { cellWidth: 50, halign: 'right' },
+            8: { cellWidth: 40, halign: 'right' },
           },
           margin: { left: 40, right: 40 },
         })
@@ -598,7 +780,12 @@ export default function ReportsBase() {
 
           <Button 
             size="sm" 
-            onClick={fetchRevenues} 
+            onClick={() => {
+              fetchRevenues()
+              fetchStaffPerformance()
+              fetchExpenses()
+              fetchDebts()
+            }} 
             disabled={loading}
             className="whitespace-nowrap text-xs sm:text-sm flex-shrink-0"
           >
@@ -708,6 +895,7 @@ export default function ReportsBase() {
                         <th className="p-1.5 sm:p-2 text-left sticky left-0 bg-muted z-10 min-w-[80px]">Period</th>
                         <th className="p-1.5 sm:p-2 text-left whitespace-nowrap">Revenue (₵)</th>
                         <th className="p-1.5 sm:p-2 text-left whitespace-nowrap">Expenses (₵)</th>
+                        <th className="p-1.5 sm:p-2 text-left whitespace-nowrap">Debts (₵)</th>
                         <th className="p-1.5 sm:p-2 text-left whitespace-nowrap">Net (₵)</th>
                         <th className="p-1.5 sm:p-2 text-left whitespace-nowrap hidden sm:table-cell">Full Pay</th>
                         <th className="p-1.5 sm:p-2 text-left whitespace-nowrap hidden sm:table-cell">Partial</th>
@@ -721,6 +909,7 @@ export default function ReportsBase() {
                     <tbody>
                       {revenues.map((r, i) => {
                         const periodExpense = expensesByPeriod[r.summary_period || ''] || 0
+                        const periodDebt = debtsByPeriod[r.summary_period || ''] || 0
                         const netRev = (r.total_revenue || 0) - periodExpense
                         
                         return (
@@ -728,6 +917,7 @@ export default function ReportsBase() {
                             <td className="p-1.5 sm:p-2 font-medium sticky left-0 bg-background z-10">{r.summary_period}</td>
                             <td className="p-1.5 sm:p-2 text-green-600 font-semibold whitespace-nowrap">{r.total_revenue?.toFixed(2)}</td>
                             <td className="p-1.5 sm:p-2 text-red-600 font-semibold whitespace-nowrap">{periodExpense.toFixed(2)}</td>
+                            <td className="p-1.5 sm:p-2 text-red-600 font-semibold whitespace-nowrap">{periodDebt.toFixed(2)}</td>
                             <td className={`p-1.5 sm:p-2 font-semibold whitespace-nowrap ${netRev >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
                               {netRev.toFixed(2)}
                             </td>
@@ -755,10 +945,15 @@ export default function ReportsBase() {
       )}
 
       {/* Staff Performance - Mobile Optimized */}
-      {staffPerformance.length > 0 && (
-        <Card className="bg-background border border-border shadow-sm" ref={staffPerfRef}>
-          <CardContent className="p-3 sm:p-4 md:p-6">
-            <h2 className="text-sm sm:text-base md:text-lg font-semibold mb-3 sm:mb-4 text-foreground">👥 Staff Performance</h2>
+      <Card className="bg-background border border-border shadow-sm" ref={staffPerfRef}>
+        <CardContent className="p-3 sm:p-4 md:p-6">
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
+            <h2 className="text-sm sm:text-base md:text-lg font-semibold text-foreground">👥 Staff Performance ({period})</h2>
+            {staffPerformance.length === 0 && !loading && (
+              <p className="text-xs text-muted-foreground">No staff performance data available</p>
+            )}
+          </div>
+          {staffPerformance.length > 0 ? (
             <div className="w-full overflow-x-auto -mx-2 px-2 sm:mx-0 sm:px-0">
               <ResponsiveContainer width="100%" height={300} minWidth={300}>
                 <BarChart data={staffPerformance}>
@@ -772,6 +967,12 @@ export default function ReportsBase() {
                   />
                   <YAxis tick={{ fill: 'currentColor', fontSize: 10 }} />
                   <Tooltip 
+                    formatter={(value: any, name: string) => {
+                      if (name === 'Completion Rate') {
+                        return [`${Number(value).toFixed(1)}%`, name]
+                      }
+                      return [value, name]
+                    }}
                     contentStyle={{ 
                       backgroundColor: 'rgba(30,30,30,0.9)', 
                       color: '#fff',
@@ -780,16 +981,24 @@ export default function ReportsBase() {
                     }} 
                   />
                   <Legend wrapperStyle={{ fontSize: '11px' }} />
-                  <Bar dataKey="total_tasks" fill="#3b82f6" name="Total" />
-                  <Bar dataKey="completed_tasks" fill="#10b981" name="Done" />
+                  <Bar dataKey="total_tasks" fill="#3b82f6" name="Total Tasks" />
+                  <Bar dataKey="completed_tasks" fill="#10b981" name="Completed" />
                   <Bar dataKey="pending_tasks" fill="#fbbf24" name="Pending" />
                   <Bar dataKey="overdue_tasks" fill="#ef4444" name="Overdue" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
-          </CardContent>
-        </Card>
-      )}
+          ) : loading ? (
+            <div className="flex items-center justify-center h-[300px]">
+              <p className="text-sm text-muted-foreground">Loading staff performance data...</p>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-[300px]">
+              <p className="text-sm text-muted-foreground">No staff performance data available for this period</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Export Options Dialog - Mobile Optimized */}
       {showExportDialog && (
