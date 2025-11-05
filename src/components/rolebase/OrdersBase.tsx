@@ -30,6 +30,7 @@ type Order = {
   customer_phone?: string
   item_description?: string
   quantity?: number
+  unit_price?: number
   total_amount?: number
   payment_method?: string
   payment_status?: string
@@ -109,6 +110,24 @@ export default function OrdersPage() {
   const canAddNew = () =>
     ['ceo', 'manager', 'executive_assistant', 'staff', 'intern', 'sales_representative', 'board'].includes(profile?.role?.toLowerCase() || '')
   const isReadOnly = () => profile?.role?.toLowerCase() === 'board'
+  
+  // Check if user can edit a specific order (admin or owner)
+  const canEditOrder = (order: Order) => {
+    if (isReadOnly()) return false
+    if (canEdit()) return true // Admin can edit any order
+    // Check if user is the owner of the order
+    if (session?.user?.id && order.created_by === session.user.id) return true
+    return false
+  }
+  
+  // Check if user can delete a specific order (admin or owner)
+  const canDeleteOrder = (order: Order) => {
+    if (isReadOnly()) return false
+    if (canEdit()) return true // Admin can delete any order
+    // Check if user is the owner of the order
+    if (session?.user?.id && order.created_by === session.user.id) return true
+    return false
+  }
 
   // ====== Fetch profile ======
   const fetchProfile = async () => {
@@ -209,6 +228,18 @@ export default function OrdersPage() {
       const { data, error, count } = await buildQuery(pageIndex)
       if (error) throw error
       const items = (data || []) as Order[]
+      
+      // Debug: Log first order to verify unit_price is included
+      if (items.length > 0) {
+        console.log('📊 Sample order data:', {
+          order_number: items[0].order_number,
+          unit_price: items[0].unit_price,
+          quantity: items[0].quantity,
+          total_amount: items[0].total_amount,
+          has_unit_price: 'unit_price' in items[0]
+        })
+      }
+      
       setOrders(items)
 
       const totalRevenue = items.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0)
@@ -240,7 +271,8 @@ export default function OrdersPage() {
   }
 
   const updatePaymentStatus = async (orderId: string, newStatus: string) => {
-    if (!canEdit() || isReadOnly()) return toast.error('You cannot modify payments')
+    const order = orders.find((o) => o.id === orderId)
+    if (!order || !canEditOrder(order)) return toast.error('You cannot modify payments')
     if (!supabase) return toast.error('Client not ready')
     try {
       const { error } = await supabase.from('orders').update({ payment_status: newStatus }).eq('id', orderId)
@@ -256,13 +288,44 @@ export default function OrdersPage() {
   }
 
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
-    if (!canEdit() || isReadOnly()) return toast.error('You cannot modify order status')
+    const order = orders.find((o) => o.id === orderId)
+    if (!order || !canEditOrder(order)) return toast.error('You cannot modify order status')
     if (!supabase) return toast.error('Client not ready')
     try {
-      const { error } = await supabase.from('orders').update({ order_status: newStatus }).eq('id', orderId)
+      const updateData: any = { order_status: newStatus }
+      
+      // Auto-calculate total_amount from unit_price × quantity when order is marked as completed
+      if (newStatus === 'completed' && order.unit_price && order.quantity) {
+        const calculatedTotal = Number(order.unit_price) * Number(order.quantity)
+        updateData.total_amount = calculatedTotal
+        console.log('📊 Auto-calculating total_amount for completed order:', {
+          orderId,
+          unit_price: order.unit_price,
+          quantity: order.quantity,
+          total_amount: calculatedTotal
+        })
+      }
+      
+      const { error } = await supabase.from('orders').update(updateData).eq('id', orderId)
       if (error) throw error
-      setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, order_status: newStatus } : o)))
-      toast.success('Order updated')
+      
+      // Update local state with new status and calculated total
+      setOrders((prev) => prev.map((o) => {
+        if (o.id === orderId) {
+          const updated = { ...o, order_status: newStatus }
+          if (newStatus === 'completed' && updateData.total_amount) {
+            updated.total_amount = updateData.total_amount
+          }
+          return updated
+        }
+        return o
+      }))
+      
+      if (newStatus === 'completed' && updateData.total_amount) {
+        toast.success(`Order marked as completed. Total amount calculated: ₵${updateData.total_amount.toFixed(2)}`)
+      } else {
+        toast.success('Order updated')
+      }
     } catch (err) {
       console.error('Update order error:', err)
       toast.error('Failed to update order')
@@ -279,6 +342,7 @@ export default function OrdersPage() {
       'Customer Phone',
       'Description',
       'Quantity',
+      'Unit Price',
       'Total Amount',
       'Payment Method',
       'Payment Status',
@@ -292,6 +356,7 @@ export default function OrdersPage() {
       o.customer_phone ?? '',
       o.item_description ?? '',
       o.quantity ?? '',
+      o.unit_price ?? '',
       o.total_amount ?? '',
       o.payment_method ?? '',
       o.payment_status ?? '',
@@ -383,7 +448,8 @@ export default function OrdersPage() {
 
   // Handle file delete
   const handleFileDelete = async (orderId: string, fileName: string) => {
-    if (!canEdit() || isReadOnly()) return toast.error('You cannot delete files')
+    const order = orders.find((o) => o.id === orderId)
+    if (!order || !canEditOrder(order)) return toast.error('You cannot delete files')
     if (!supabase) return
     if (!confirm(`Delete ${fileName}?`)) return
 
@@ -426,6 +492,14 @@ export default function OrdersPage() {
 
   const handleDeleteConfirm = async () => {
     if (!orderToDelete || !supabase) return
+    
+    // Check permissions before deleting
+    if (!canDeleteOrder(orderToDelete)) {
+      toast.error('You do not have permission to delete this order')
+      setDeleteDialogOpen(false)
+      setOrderToDelete(null)
+      return
+    }
 
     setDeleting(true)
     try {
@@ -572,6 +646,7 @@ export default function OrdersPage() {
                 'Phone',
                 'Description',
                 'Qty',
+                'Unit Price (₵)',
                 'Amount (₵)',
                 'Payment Method',
                 'Payment',
@@ -586,9 +661,9 @@ export default function OrdersPage() {
           </thead>
           <tbody className="divide-y divide-border">
             {loading ? (
-              <tr><td colSpan={13} className="text-center py-8 text-muted-foreground">Loading...</td></tr>
+              <tr><td colSpan={14} className="text-center py-8 text-muted-foreground">Loading...</td></tr>
             ) : orders.length === 0 ? (
-              <tr><td colSpan={13} className="text-center py-8 text-muted-foreground">No orders found</td></tr>
+              <tr><td colSpan={14} className="text-center py-8 text-muted-foreground">No orders found</td></tr>
             ) : (
               orders.map((o) => (
                 <Fragment key={o.id}>
@@ -613,6 +688,7 @@ export default function OrdersPage() {
                     <td className="px-4 py-3">{o.customer_phone || '-'}</td>
                     <td className="px-4 py-3 max-w-xs truncate">{o.item_description || '-'}</td>
                     <td className="px-4 py-3">{o.quantity ?? '-'}</td>
+                    <td className="px-4 py-3">₵{o.unit_price ? o.unit_price.toFixed(2) : '-'}</td>
                     <td className="px-4 py-3 font-semibold">₵{o.total_amount ?? '0.00'}</td>
                     
                     {/* Payment Method */}
@@ -642,9 +718,10 @@ export default function OrdersPage() {
                         </select>
                       ) : (
                         <span
-                          onClick={() => canEdit() && setEditingPaymentStatus(o.id)}
+                          onClick={() => canEditOrder(o) && setEditingPaymentStatus(o.id)}
                           className={cn(
-                            'px-2 py-1 rounded-full text-xs font-medium cursor-pointer',
+                            'px-2 py-1 rounded-full text-xs font-medium',
+                            canEditOrder(o) ? 'cursor-pointer' : 'cursor-default',
                             (o.payment_status || '').toLowerCase() === 'full payment'
                               ? 'bg-green-50 text-green-600'
                               : (o.payment_status || '').toLowerCase().includes('partial')
@@ -674,9 +751,10 @@ export default function OrdersPage() {
                         </select>
                       ) : (
                         <span
-                          onClick={() => canEdit() && setEditingOrderStatus(o.id)}
+                          onClick={() => canEditOrder(o) && setEditingOrderStatus(o.id)}
                           className={cn(
-                            'px-2 py-1 rounded-full text-xs font-medium cursor-pointer',
+                            'px-2 py-1 rounded-full text-xs font-medium',
+                            canEditOrder(o) ? 'cursor-pointer' : 'cursor-default',
                             o.order_status === 'completed'
                               ? 'bg-green-50 text-green-600'
                               : o.order_status === 'in_progress'
@@ -691,12 +769,14 @@ export default function OrdersPage() {
                       )}
                     </td>
 
-                    {/* Created By - Show creator name or email */}
+                    {/* Created By - Show creator first name or email */}
                     <td className="px-4 py-3">
                       {o.creator_name ? (
                         <div className="flex items-center gap-2">
                           <UserIcon className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm">{o.creator_name}</span>
+                          <span className="text-sm">
+                            {o.creator_name.split(' ')[0]}
+                          </span>
                         </div>
                       ) : o.creator_email ? (
                         <div className="flex items-center gap-2">
@@ -718,7 +798,7 @@ export default function OrdersPage() {
                           <PaperClipIcon className="h-4 w-4" />
                         </button>
                         {/* ✏️ Edit Button START */}
-                        {canEdit() && !isReadOnly() && (
+                        {canEditOrder(o) && (
                           <button
                             onClick={() => handleEditClick(o)}
                             className="p-2 text-blue-600 hover:bg-blue-600/10 rounded-lg transition-colors"
@@ -729,7 +809,7 @@ export default function OrdersPage() {
                         )}
                         {/* ✏️ Edit Button END */}
                         {/* 🗑️ Delete Button START */}
-                        {canEdit() && !isReadOnly() && (
+                        {canDeleteOrder(o) && (
                           <button
                             onClick={() => handleDeleteClick(o)}
                             className="p-2 text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
@@ -818,7 +898,7 @@ export default function OrdersPage() {
                                     >
                                       <EyeIcon className="h-4 w-4 text-primary" />
                                     </button>
-                                    {canEdit() && !isReadOnly() && (
+                                    {canEditOrder(o) && (
                                       <button
                                         onClick={() => handleFileDelete(o.id, file.name)}
                                         className="p-2 hover:bg-destructive/10 rounded"

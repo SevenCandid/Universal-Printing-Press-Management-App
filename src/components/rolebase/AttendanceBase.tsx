@@ -14,12 +14,14 @@ import {
   FunnelIcon,
   UserGroupIcon,
   CalendarDaysIcon,
-  ExclamationCircleIcon
+  ExclamationCircleIcon,
+  PencilIcon
 } from '@heroicons/react/24/outline'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import BreakTracker from '@/components/attendance/BreakTracker'
 import LeaveRequestModal from '@/components/attendance/LeaveRequestModal'
+import { AttendanceConfirmDialog } from '@/components/ui/AttendanceConfirmDialog'
 
 // 📍 Office coordinates - Sampa
 // Reference: https://maps.app.goo.gl/8jiRTLWJu2gCpKew7
@@ -110,11 +112,14 @@ type LeaveRequest = {
 
 export default function AttendanceBase({ role }: { role: string }) {
   const { supabase, session } = useSupabase()
+  const [mounted, setMounted] = useState(false)
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([])
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true) // Start with true to prevent hydration mismatch
   const [checkingIn, setCheckingIn] = useState(false)
   const [checkingOut, setCheckingOut] = useState(false)
   const [todayRecord, setTodayRecord] = useState<AttendanceRecord | null>(null)
+  const [showCheckInConfirm, setShowCheckInConfirm] = useState(false)
+  const [showCheckOutConfirm, setShowCheckOutConfirm] = useState(false)
   
   // 🔍 Filter States
   const [periodFilter, setPeriodFilter] = useState<string>('today')
@@ -124,7 +129,7 @@ export default function AttendanceBase({ role }: { role: string }) {
   const [customEndDate, setCustomEndDate] = useState<string>('')
   const [showFilters, setShowFilters] = useState(false)
   
-  // 👥 Currently checked in staff (for CEO)
+  // 👥 Currently checked in staff (for CEO/Board)
   const [currentlyCheckedIn, setCurrentlyCheckedIn] = useState<AttendanceRecord[]>([])
   
   // 📊 Attendance Statistics
@@ -144,9 +149,13 @@ export default function AttendanceBase({ role }: { role: string }) {
   const [leaveRequestFilter, setLeaveRequestFilter] = useState<'pending' | 'all' | 'approved' | 'rejected'>('pending')
   const [processingRequest, setProcessingRequest] = useState<string | null>(null)
   const [showLeaveRequests, setShowLeaveRequests] = useState(false)
+  
+  // ✏️ Edit Attendance Status (for pending checkout)
+  const [editingStatus, setEditingStatus] = useState<string | null>(null)
+  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null)
 
-  // Helper: Check if user can view all staff (CEO only)
-  const canViewAllStaff = () => role === 'ceo'
+  // Helper: Check if user can view all staff (CEO and Board)
+  const canViewAllStaff = () => role === 'ceo' || role === 'board'
 
   // Helper: Handle JWT expiration by redirecting to login
   const handleJWTExpiration = async (error: any) => {
@@ -267,8 +276,18 @@ export default function AttendanceBase({ role }: { role: string }) {
     return staffStatsArray
   }
 
+  // Set mounted state after client-side hydration
   useEffect(() => {
-    if (session?.user) {
+    setMounted(true)
+  }, [])
+
+  // Debug: Log dialog state changes
+  useEffect(() => {
+    console.log('🔍 Dialog state changed:', { showCheckInConfirm, showCheckOutConfirm })
+  }, [showCheckInConfirm, showCheckOutConfirm])
+
+  useEffect(() => {
+    if (session?.user && mounted) {
       fetchTodayRecord() // Always fetch today's record first
       fetchAttendance()
       if (canViewAllStaff()) {
@@ -277,7 +296,7 @@ export default function AttendanceBase({ role }: { role: string }) {
         fetchLeaveRequests()
       }
     }
-  }, [session])
+  }, [session, mounted])
 
   // Refetch when filters change
   useEffect(() => {
@@ -297,7 +316,7 @@ export default function AttendanceBase({ role }: { role: string }) {
     }
   }, [leaveRequestFilter])
   
-  // Auto-refresh currently checked-in staff every 30 seconds (for CEO)
+  // Auto-refresh currently checked-in staff every 30 seconds (for CEO/Board)
   useEffect(() => {
     if (!canViewAllStaff()) return
     
@@ -342,7 +361,7 @@ export default function AttendanceBase({ role }: { role: string }) {
     }
   }
 
-  // 👥 Fetch currently checked-in staff (for CEO real-time monitoring)
+  // 👥 Fetch currently checked-in staff (for CEO/Board real-time monitoring)
   const fetchCurrentlyCheckedIn = async () => {
     if (!supabase || !canViewAllStaff()) return
     
@@ -490,20 +509,20 @@ export default function AttendanceBase({ role }: { role: string }) {
 
     switch (periodFilter) {
       case 'today':
-        startDate = new Date(now.setHours(0, 0, 0, 0))
-        endDate = new Date(now.setHours(23, 59, 59, 999))
+        // Fix: Create new Date objects without mutating the original
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+        endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
         break
       case 'this_week':
         const firstDay = now.getDate() - now.getDay()
-        startDate = new Date(now.setDate(firstDay))
-        startDate.setHours(0, 0, 0, 0)
+        startDate = new Date(now.getFullYear(), now.getMonth(), firstDay, 0, 0, 0, 0)
         break
       case 'this_month':
         startDate = new Date(now.getFullYear(), now.getMonth(), 1)
         break
       case 'last_month':
         startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-        endDate = new Date(now.getFullYear(), now.getMonth(), 0)
+        endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999)
         break
       case 'custom':
         if (customStartDate && customEndDate) {
@@ -546,12 +565,16 @@ export default function AttendanceBase({ role }: { role: string }) {
       
       // Build query - Note: profiles join might fail if foreign key doesn't exist
       // Use check_in for date filtering (not created_at) to avoid timezone issues
-      const startDateTime = new Date(`${startDate}T00:00:00`)
-      const endDateTime = new Date(`${endDate}T23:59:59`)
+      // Create dates in UTC to match database timezone
+      const startDateTime = new Date(`${startDate}T00:00:00.000Z`)
+      const endDateTime = new Date(`${endDate}T23:59:59.999Z`)
       
       console.log('📅 Date range for query:', {
-        startDate: startDateTime.toISOString(),
-        endDate: endDateTime.toISOString()
+        startDate,
+        endDate,
+        startDateTimeISO: startDateTime.toISOString(),
+        endDateTimeISO: endDateTime.toISOString(),
+        localTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone
       })
       
       let query = supabase
@@ -561,11 +584,11 @@ export default function AttendanceBase({ role }: { role: string }) {
         .lte('check_in', endDateTime.toISOString())
         .order('check_in', { ascending: false })
 
-      // For CEO, only show checked-out records in history (active check-ins shown separately)
+      // For CEO/Board, show both checked-out and checked-in (pending checkout) records
       // For others, show all their records
       if (canViewAllStaff()) {
-        console.log('📋 CEO view: Filtering for checked_out status only')
-        query = query.eq('status', 'checked_out')
+        console.log('📋 CEO/Board view: Showing checked_out and checked_in (pending checkout) records')
+        query = query.in('status', ['checked_out', 'checked_in'])
       }
 
       // Filter by user if not viewing all staff
@@ -574,35 +597,46 @@ export default function AttendanceBase({ role }: { role: string }) {
         console.log('👤 Staff view: Filtering for user', session.user.id)
         query = query.eq('user_id', session.user.id)
       } else if (selectedStaff && selectedStaff !== 'all') {
-        // CEO viewing a specific staff member
-        console.log('👤 CEO view: Filtering for staff', selectedStaff)
+        // CEO/Board viewing a specific staff member
+        console.log('👤 CEO/Board view: Filtering for staff', selectedStaff)
         query = query.eq('user_id', selectedStaff)
       }
-      // Otherwise show all staff (for CEO when selectedStaff === 'all')
+      // Otherwise show all staff (for CEO/Board when selectedStaff === 'all')
 
       const { data, error } = await query
       
-      if (!error) {
-        console.log('✅ Fetched attendance records:', data?.length || 0, 'records')
-        if (data && data.length > 0) {
-          console.log('📋 Sample records:', data.slice(0, 3).map(r => ({
-            id: r.id.substring(0, 8),
-            user_id: r.user_id.substring(0, 8),
-            status: r.status,
-            check_in: r.check_in,
-            check_out: r.check_out,
-            created_at: r.created_at
-          })))
-        }
-      }
-
       if (error) {
         console.error('❌ Query error:', error)
+        console.error('Query details:', {
+          dateRange: `${startDate} to ${endDate}`,
+          statusFilter: canViewAllStaff() ? 'checked_out and checked_in (pending checkout)' : 'all',
+          userFilter: !canViewAllStaff() ? session.user.id : (selectedStaff !== 'all' ? selectedStaff : 'all')
+        })
         
         // Check for JWT expiration
         if (await handleJWTExpiration(error)) return
         
         throw error
+      }
+      
+      console.log('✅ Fetched attendance records:', data?.length || 0, 'records')
+      if (data && data.length > 0) {
+        console.log('📋 Sample records:', data.slice(0, 3).map(r => ({
+          id: r.id.substring(0, 8),
+          user_id: r.user_id.substring(0, 8),
+          status: r.status,
+          check_in: r.check_in,
+          check_out: r.check_out,
+          created_at: r.created_at
+        })))
+      } else {
+        console.warn('⚠️ No records found with current filters:', {
+          dateRange: `${startDate} to ${endDate}`,
+          statusFilter: canViewAllStaff() ? 'checked_out and checked_in (pending checkout)' : 'all statuses',
+          userFilter: !canViewAllStaff() ? `user: ${session.user.id}` : (selectedStaff !== 'all' ? `staff: ${selectedStaff}` : 'all staff'),
+          canViewAllStaff: canViewAllStaff(),
+          periodFilter
+        })
       }
       
       // Fetch profile data for each attendance record (if viewing all staff)
@@ -1419,6 +1453,159 @@ export default function AttendanceBase({ role }: { role: string }) {
     return `${hours}h ${minutes}m`
   }
 
+  // Check if user can update a specific attendance record (admin or owner)
+  const canUpdateAttendance = (record: AttendanceRecord) => {
+    if (!session?.user?.id) return false
+    if (canViewAllStaff()) return true // Admin can update any record
+    // Check if user is the owner of the record
+    if (record.user_id === session.user.id) return true
+    return false
+  }
+
+  // Update attendance status (for pending checkout records)
+  const handleUpdateStatus = async (recordId: string, newStatus: string) => {
+    if (!supabase || !session?.user?.id) {
+      toast.error('You do not have permission to update attendance status')
+      return
+    }
+
+    const record = attendance.find(r => r.id === recordId)
+    if (!record) {
+      toast.error('Attendance record not found')
+      return
+    }
+
+    // Check permissions
+    if (!canUpdateAttendance(record)) {
+      toast.error('You do not have permission to update this attendance record')
+      return
+    }
+
+    // Check if this is today's active check-in
+    const isTodaysRecord = todayRecord?.id === recordId
+    const isCurrentlyCheckedIn = todayRecord?.status === 'checked_in' && !todayRecord?.check_out
+    
+    // Check if the record is from a previous day (not today)
+    const recordCheckInDate = new Date(record.check_in)
+    const today = new Date()
+    const isOldRecord = recordCheckInDate.getDate() !== today.getDate() ||
+                       recordCheckInDate.getMonth() !== today.getMonth() ||
+                       recordCheckInDate.getFullYear() !== today.getFullYear()
+
+    setUpdatingStatus(recordId)
+    try {
+      const updateData: any = {
+        status: newStatus
+      }
+
+      // If updating to checked_out and no check_out time exists, set it appropriately
+      let checkOutTime: string | null = null
+      let workHoursCalculated: string | null = null
+      
+      if (newStatus === 'checked_out') {
+        if (!record.check_out) {
+          // If this is an old record (from previous day), set check_out to end of that check-in day
+          // This allows users to check out forgotten checkouts without affecting today's active check-in
+          if (isOldRecord) {
+            const checkInDate = new Date(record.check_in)
+            const endOfDay = new Date(
+              checkInDate.getFullYear(),
+              checkInDate.getMonth(),
+              checkInDate.getDate(),
+              23, 59, 59, 999
+            )
+            checkOutTime = endOfDay.toISOString()
+            updateData.check_out = checkOutTime
+            
+            // Calculate work hours
+            const diff = endOfDay.getTime() - new Date(record.check_in).getTime()
+            const hours = Math.floor(diff / (1000 * 60 * 60))
+            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+            workHoursCalculated = `${hours}h ${minutes}m`
+            
+            console.log('📅 Setting check_out to end of check-in day for old pending checkout:', {
+              checkIn: record.check_in,
+              checkOut: checkOutTime,
+              workHours: workHoursCalculated,
+              isOldRecord: true,
+              today: today.toISOString()
+            })
+          } else if (isTodaysRecord && isCurrentlyCheckedIn) {
+            // If this is today's record and user is currently checked in, use current time
+            checkOutTime = new Date().toISOString()
+            updateData.check_out = checkOutTime
+            
+            // Calculate work hours
+            const diff = new Date(checkOutTime).getTime() - new Date(record.check_in).getTime()
+            const hours = Math.floor(diff / (1000 * 60 * 60))
+            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+            workHoursCalculated = `${hours}h ${minutes}m`
+          } else {
+            // Fallback: use current time (shouldn't happen often)
+            checkOutTime = new Date().toISOString()
+            updateData.check_out = checkOutTime
+            
+            // Calculate work hours
+            const diff = new Date(checkOutTime).getTime() - new Date(record.check_in).getTime()
+            const hours = Math.floor(diff / (1000 * 60 * 60))
+            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+            workHoursCalculated = `${hours}h ${minutes}m`
+          }
+        } else {
+          // check_out already exists, calculate from existing times
+          workHoursCalculated = calculateWorkHours(record.check_in, record.check_out)
+        }
+      }
+
+      const { error } = await supabase
+        .from('attendance')
+        .update(updateData)
+        .eq('id', recordId)
+
+      if (error) {
+        console.error('Update status error:', error)
+        throw new Error(error.message || 'Failed to update attendance status')
+      }
+
+      // Show success message with work hours
+      if (newStatus === 'checked_out' && workHoursCalculated) {
+        if (isOldRecord) {
+          toast.success(
+            `✅ Old pending checkout marked as checked out\n📅 Date: ${new Date(record.check_in).toLocaleDateString()}\n⏰ Work Hours: ${workHoursCalculated}`,
+            { duration: 5000 }
+          )
+        } else {
+          toast.success(
+            `✅ Attendance status updated to checked out\n⏰ Work Hours: ${workHoursCalculated}`,
+            { duration: 4000 }
+          )
+        }
+      } else {
+        toast.success(`Attendance status updated to ${newStatus.replace('_', ' ')}`)
+      }
+      
+      // Refresh attendance data
+      await fetchAttendance()
+      
+      // Only refresh today's record if we didn't just update it or if it's an old record
+      // This preserves today's active check-in when updating old pending checkouts
+      if (!isTodaysRecord || isOldRecord) {
+        await fetchTodayRecord()
+      }
+      
+      if (canViewAllStaff()) {
+        await fetchCurrentlyCheckedIn()
+      }
+      
+      setEditingStatus(null)
+    } catch (err: any) {
+      console.error('Update status error:', err)
+      toast.error(err.message || 'Failed to update attendance status')
+    } finally {
+      setUpdatingStatus(null)
+    }
+  }
+
   // 🗓️ Fetch leave requests (CEO only)
   const fetchLeaveRequests = async () => {
     if (!supabase || !canViewAllStaff()) return
@@ -1737,7 +1924,10 @@ export default function AttendanceBase({ role }: { role: string }) {
         {/* Action Buttons */}
         <div className="flex gap-2">
           <Button
-            onClick={handleCheckIn}
+            onClick={() => {
+              console.log('🔘 Check In button clicked, setting showCheckInConfirm to true')
+              setShowCheckInConfirm(true)
+            }}
             disabled={checkingIn || (todayRecord?.status === 'checked_in')}
             size="sm"
             className="flex-1 bg-green-600 hover:bg-green-700 text-white h-9"
@@ -1746,7 +1936,10 @@ export default function AttendanceBase({ role }: { role: string }) {
             <span className="text-sm">{checkingIn ? 'Checking In...' : 'Check In'}</span>
           </Button>
           <Button
-            onClick={handleCheckOut}
+            onClick={() => {
+              console.log('🔘 Check Out button clicked, setting showCheckOutConfirm to true')
+              setShowCheckOutConfirm(true)
+            }}
             disabled={checkingOut || !todayRecord || todayRecord.status === 'checked_out'}
             size="sm"
             className="flex-1 bg-blue-600 hover:bg-blue-700 text-white h-9"
@@ -2009,7 +2202,7 @@ export default function AttendanceBase({ role }: { role: string }) {
         </div>
       )}
 
-      {/* Currently Checked In - CEO Only */}
+      {/* Currently Checked In - CEO/Board Only */}
       {canViewAllStaff() && (
         <div className="bg-card border border-border rounded-lg p-4">
           <div className="flex items-center justify-between mb-3">
@@ -2322,10 +2515,27 @@ export default function AttendanceBase({ role }: { role: string }) {
           )}
         </div>
         
-        {loading ? (
+        {!mounted || loading ? (
           <p className="text-center py-6 text-sm text-muted-foreground">Loading...</p>
         ) : attendance.length === 0 ? (
-          <p className="text-center py-6 text-sm text-muted-foreground">No attendance records found for the selected period</p>
+          <div className="text-center py-6 space-y-2">
+            <p className="text-sm text-muted-foreground">No attendance records found for the selected period</p>
+            <div className="text-xs text-muted-foreground space-y-1">
+              <p>Current filters:</p>
+              <ul className="list-disc list-inside space-y-0.5 text-left inline-block">
+                <li>Period: {periodFilter === 'today' ? 'Today only' : periodFilter === 'this_week' ? 'This Week' : periodFilter === 'this_month' ? 'This Month' : periodFilter === 'last_month' ? 'Last Month' : 'Custom Range'}</li>
+                {canViewAllStaff() && (
+                  <li>Status: Checked Out only (active check-ins shown above)</li>
+                )}
+                {canViewAllStaff() && selectedStaff !== 'all' && (
+                  <li>Staff: {staffMembers.find(s => s.user_id === selectedStaff)?.name || selectedStaff}</li>
+                )}
+              </ul>
+              <p className="mt-2 text-muted-foreground/80">
+                💡 Try changing the period filter to see older records
+              </p>
+            </div>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -2364,13 +2574,31 @@ export default function AttendanceBase({ role }: { role: string }) {
                       </td>
                     )}
                     <td className="px-3 py-2.5 text-xs">
-                      {record.check_in ? new Date(record.check_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                      {record.check_in 
+                        ? (
+                          <>
+                            {new Date(record.check_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                            {record.status === 'checked_in' && !record.check_out && (
+                              <span className="ml-2 text-orange-600 text-[10px] font-medium">(Active)</span>
+                            )}
+                          </>
+                        )
+                        : '-'
+                      }
                     </td>
                     <td className="px-3 py-2.5 text-xs">
-                      {record.check_out ? new Date(record.check_out).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                      {record.check_out 
+                        ? new Date(record.check_out).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) 
+                        : record.status === 'checked_in' 
+                          ? <span className="text-orange-600 font-medium">Pending Checkout</span>
+                          : '-'
+                      }
                     </td>
                     <td className="px-3 py-2.5 text-xs font-medium">
-                      {calculateWorkHours(record.check_in, record.check_out)}
+                      {record.status === 'checked_in' && !record.check_out 
+                        ? <span className="text-orange-600">In Progress</span>
+                        : calculateWorkHours(record.check_in, record.check_out)
+                      }
                     </td>
                     <td className="px-3 py-2.5 text-xs">
                       <div className="space-y-1">
@@ -2402,15 +2630,50 @@ export default function AttendanceBase({ role }: { role: string }) {
                       </div>
                     </td>
                     <td className="px-3 py-2.5">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                          record.status === 'checked_out'
-                            ? 'bg-blue-50 text-blue-600'
-                            : 'bg-green-50 text-green-600'
-                        }`}
-                      >
-                        {record.status.replace('_', ' ').toUpperCase()}
-                      </span>
+                      {editingStatus === record.id && canUpdateAttendance(record) && record.status === 'checked_in' && !record.check_out ? (
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={record.status}
+                            onChange={(e) => handleUpdateStatus(record.id, e.target.value)}
+                            disabled={updatingStatus === record.id}
+                            className="px-2 py-1 text-xs border border-border rounded-md bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-transparent"
+                            onBlur={() => setEditingStatus(null)}
+                          >
+                            <option value="checked_in">Checked In</option>
+                            <option value="checked_out">Checked Out</option>
+                          </select>
+                          {updatingStatus === record.id && (
+                            <span className="text-xs text-muted-foreground">Updating...</span>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                              record.status === 'checked_out'
+                                ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400'
+                                : record.status === 'checked_in' && !record.check_out
+                                ? 'bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400'
+                                : 'bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400'
+                            }`}
+                          >
+                            {record.status === 'checked_in' && !record.check_out
+                              ? 'PENDING CHECKOUT'
+                              : record.status.replace('_', ' ').toUpperCase()
+                            }
+                          </span>
+                          {canUpdateAttendance(record) && record.status === 'checked_in' && !record.check_out && (
+                            <button
+                              onClick={() => setEditingStatus(record.id)}
+                              disabled={updatingStatus === record.id}
+                              className="p-1 text-orange-600 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded transition-colors"
+                              title="Update status"
+                            >
+                              <PencilIcon className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -2419,6 +2682,37 @@ export default function AttendanceBase({ role }: { role: string }) {
           </div>
         )}
       </div>
+
+      {/* Confirmation Dialogs */}
+      <AttendanceConfirmDialog
+        isOpen={showCheckInConfirm}
+        onClose={() => {
+          console.log('❌ Check In dialog closed')
+          setShowCheckInConfirm(false)
+        }}
+        onConfirm={() => {
+          console.log('✅ Check In confirmed')
+          setShowCheckInConfirm(false)
+          handleCheckIn()
+        }}
+        type="checkin"
+        loading={checkingIn}
+      />
+      
+      <AttendanceConfirmDialog
+        isOpen={showCheckOutConfirm}
+        onClose={() => {
+          console.log('❌ Check Out dialog closed')
+          setShowCheckOutConfirm(false)
+        }}
+        onConfirm={() => {
+          console.log('✅ Check Out confirmed')
+          setShowCheckOutConfirm(false)
+          handleCheckOut()
+        }}
+        type="checkout"
+        loading={checkingOut}
+      />
 
       {/* Leave Request Modal - Only for staff */}
       {!canViewAllStaff() && (

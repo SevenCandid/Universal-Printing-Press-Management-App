@@ -16,6 +16,7 @@ type Order = {
   customer_email?: string
   item_description?: string
   quantity?: number
+  unit_price?: number
   total_amount?: number
   payment_method?: string
   payment_status?: string
@@ -44,6 +45,7 @@ export function EditOrderModal({ isOpen, onClose, order, onSuccess }: EditOrderM
         customer_email: order.customer_email || '',
         item_description: order.item_description || '',
         quantity: order.quantity || 0,
+        unit_price: order.unit_price || 0,
         total_amount: order.total_amount || 0,
         payment_method: order.payment_method || 'cash',
         payment_status: order.payment_status || 'pending',
@@ -66,6 +68,7 @@ export function EditOrderModal({ isOpen, onClose, order, onSuccess }: EditOrderM
         customer_phone: formData.customer_phone,
         item_description: formData.item_description,
         quantity: formData.quantity,
+        unit_price: formData.unit_price,
         total_amount: formData.total_amount,
         payment_method: formData.payment_method,
         payment_status: formData.payment_status,
@@ -202,13 +205,23 @@ export function EditOrderModal({ isOpen, onClose, order, onSuccess }: EditOrderM
                 rows={3}
               />
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Quantity</label>
                 <Input
                   type="number"
                   value={formData.quantity || 0}
                   onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) || 0 })}
+                  min="0"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Unit Price (₵)</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={formData.unit_price || 0}
+                  onChange={(e) => setFormData({ ...formData, unit_price: parseFloat(e.target.value) || 0 })}
                   min="0"
                 />
               </div>

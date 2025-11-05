@@ -10,6 +10,7 @@ import {
   PlayIcon,
   CubeIcon
 } from '@heroicons/react/24/outline'
+import { BreakConfirmDialog } from '@/components/ui/BreakConfirmDialog'
 
 type Break = {
   id: string
@@ -34,6 +35,8 @@ export default function BreakTracker({ attendanceId, userId, isCheckedIn }: Brea
   const [todayBreaks, setTodayBreaks] = useState<Break[]>([])
   const [loading, setLoading] = useState(false)
   const [breakType, setBreakType] = useState<string>('regular')
+  const [showStartBreakConfirm, setShowStartBreakConfirm] = useState(false)
+  const [showEndBreakConfirm, setShowEndBreakConfirm] = useState(false)
 
   useEffect(() => {
     if (userId && isCheckedIn) {
@@ -363,7 +366,7 @@ export default function BreakTracker({ attendanceId, userId, isCheckedIn }: Brea
             </select>
           </div>
           <Button
-            onClick={handleStartBreak}
+            onClick={() => setShowStartBreakConfirm(true)}
             disabled={loading || !attendanceId}
             size="sm"
             className="w-full bg-orange-600 hover:bg-orange-700 text-white"
@@ -391,7 +394,7 @@ export default function BreakTracker({ attendanceId, userId, isCheckedIn }: Brea
             </p>
           </div>
           <Button
-            onClick={handleEndBreak}
+            onClick={() => setShowEndBreakConfirm(true)}
             disabled={loading}
             size="sm"
             className="w-full bg-green-600 hover:bg-green-700 text-white"
@@ -459,6 +462,30 @@ export default function BreakTracker({ attendanceId, userId, isCheckedIn }: Brea
           </div>
         </div>
       )}
+
+      {/* Confirmation Dialogs */}
+      <BreakConfirmDialog
+        isOpen={showStartBreakConfirm}
+        onClose={() => setShowStartBreakConfirm(false)}
+        onConfirm={() => {
+          setShowStartBreakConfirm(false)
+          handleStartBreak()
+        }}
+        type="start"
+        breakType={breakType}
+        loading={loading}
+      />
+      
+      <BreakConfirmDialog
+        isOpen={showEndBreakConfirm}
+        onClose={() => setShowEndBreakConfirm(false)}
+        onConfirm={() => {
+          setShowEndBreakConfirm(false)
+          handleEndBreak()
+        }}
+        type="end"
+        loading={loading}
+      />
     </div>
   )
 }

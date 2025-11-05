@@ -61,8 +61,19 @@ export default function GlobalNotifier({ children }: { children?: ReactNode }) {
     if (!permissionGranted) return
 
     try {
+      // Ensure service worker is ready before showing notification
+      if ('serviceWorker' in navigator) {
+        try {
+          // Wait for service worker to be ready (important for mobile)
+          await navigator.serviceWorker.ready
+          console.log('✅ Service worker ready for notification')
+        } catch (swError) {
+          console.warn('⚠️ Service worker not ready, using fallback:', swError)
+        }
+      }
+
       // Use service worker notification for better mobile support
-      await showServiceWorkerNotification({
+      const shown = await showServiceWorkerNotification({
         title,
         body,
         icon: '/icons/icon-192x192.png',
@@ -71,8 +82,33 @@ export default function GlobalNotifier({ children }: { children?: ReactNode }) {
         vibrate: [200, 100, 200],
         data: { url: link || '/' },
       })
+      
+      if (!shown) {
+        console.warn('⚠️ Service worker notification failed, trying fallback')
+        // Fallback to regular notification API
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification(title, {
+            body,
+            icon: '/icons/icon-192x192.png',
+            badge: '/icons/icon-192x192.png',
+            tag: 'upp-notification',
+          })
+        }
+      }
     } catch (err) {
       console.error('Notification error:', err)
+      // Final fallback: try regular notification API
+      try {
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification(title, {
+            body,
+            icon: '/icons/icon-192x192.png',
+            badge: '/icons/icon-192x192.png',
+          })
+        }
+      } catch (fallbackErr) {
+        console.error('Fallback notification also failed:', fallbackErr)
+      }
     }
   }
   
@@ -103,12 +139,28 @@ export default function GlobalNotifier({ children }: { children?: ReactNode }) {
 
     // Check if notification is for this user's role
     const userRole = localStorage.getItem('role')?.toLowerCase() || ''
-    const targetRoles = newRecord.user_role?.toLowerCase() || 'all'
+    const targetRoles = (newRecord.user_role?.toLowerCase() || 'all').trim()
 
     // Check if user should see this notification
-    if (targetRoles !== 'all' && !targetRoles.includes(userRole)) {
-      return // Skip this notification
+    // Handle 'all', comma-separated roles (e.g., 'ceo,manager,staff'), and single role
+    if (targetRoles !== 'all') {
+      const roleList = targetRoles.split(',').map(r => r.trim())
+      if (!roleList.includes(userRole)) {
+        console.log('🔔 Notification filtered out:', {
+          userRole,
+          targetRoles,
+          roleList,
+          notification: newRecord.title
+        })
+        return // Skip this notification
+      }
     }
+    
+    console.log('🔔 Notification accepted:', {
+      userRole,
+      targetRoles,
+      notification: newRecord.title
+    })
 
     // Check if notification already exists (avoid duplicates)
     setNotifications((prev) => {
@@ -149,10 +201,17 @@ export default function GlobalNotifier({ children }: { children?: ReactNode }) {
     try {
       const userRole = localStorage.getItem('role')?.toLowerCase() || ''
       
-      const { data, error } = await supabase
+      // Build query to fetch notifications for user's role
+      // Handle 'all', single role, and comma-separated roles
+      let query = supabase
         .from('notifications')
         .select('*')
-        .or(`user_role.eq.all,user_role.ilike.%${userRole}%`)
+      
+      // Filter: user_role = 'all' OR user_role contains the user's role
+      // For comma-separated roles like 'ceo,manager,staff', check if user's role is included
+      query = query.or(`user_role.eq.all,user_role.ilike.%${userRole}%`)
+      
+      const { data, error } = await query
         .order('created_at', { ascending: false })
         .limit(50)
 
@@ -160,9 +219,25 @@ export default function GlobalNotifier({ children }: { children?: ReactNode }) {
         console.error('Error fetching notifications:', error)
         return
       }
+      
+      // Additional client-side filtering for comma-separated roles
+      // This ensures staff users see notifications even if user_role is 'ceo,manager,staff'
+      const filteredData = data?.filter((n) => {
+        const targetRoles = (n.user_role?.toLowerCase() || 'all').trim()
+        if (targetRoles === 'all') return true
+        const roleList = targetRoles.split(',').map(r => r.trim())
+        return roleList.includes(userRole)
+      }) || []
+      
+      console.log('🔔 Fetched notifications:', {
+        userRole,
+        total: data?.length || 0,
+        filtered: filteredData.length,
+        sampleRoles: data?.slice(0, 3).map(n => n.user_role)
+      })
 
-      if (data) {
-        const mappedNotifications: InAppNotification[] = data.map((n) => ({
+      if (filteredData) {
+        const mappedNotifications: InAppNotification[] = filteredData.map((n) => ({
           id: n.id,
           type: n.type,
           title: n.title,
@@ -218,10 +293,29 @@ export default function GlobalNotifier({ children }: { children?: ReactNode }) {
     if (supabase) {
       try {
         const userRole = localStorage.getItem('role')?.toLowerCase() || ''
-        await supabase
+        
+        // Fetch all notifications for this user's role first
+        const { data: allNotifications } = await supabase
           .from('notifications')
-          .update({ read: true })
+          .select('id, user_role')
           .or(`user_role.eq.all,user_role.ilike.%${userRole}%`)
+        
+        // Filter client-side to get only notifications that match user's role
+        const matchingNotifications = allNotifications?.filter((n) => {
+          const targetRoles = (n.user_role?.toLowerCase() || 'all').trim()
+          if (targetRoles === 'all') return true
+          const roleList = targetRoles.split(',').map(r => r.trim())
+          return roleList.includes(userRole)
+        }) || []
+        
+        // Update only the matching notifications
+        if (matchingNotifications.length > 0) {
+          const ids = matchingNotifications.map(n => n.id)
+          await supabase
+            .from('notifications')
+            .update({ read: true })
+            .in('id', ids)
+        }
       } catch (err) {
         console.error('Error marking all as read:', err)
       }

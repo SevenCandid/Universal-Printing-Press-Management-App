@@ -26,7 +26,7 @@ const formatCurrency = (amount: number) =>
 
 export default function DashboardBase({ role }: { role: string }) {
   const { supabase, session } = useSupabase()
-  const [period, setPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'quarterly' | 'halfyear' | 'yearly'>('monthly')
+  const [period, setPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'quarterly' | 'halfyear' | 'yearly' | 'all'>('monthly')
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
@@ -51,10 +51,71 @@ export default function DashboardBase({ role }: { role: string }) {
     if (!session) return
     setLoading(true)
     try {
+      // Calculate date range for the selected period
+      const now = new Date()
+      let dateRange: { startDate: Date; endDate: Date } | null = null
+      
+      if (period !== 'all') {
+        let startDate: Date
+        let endDate: Date = new Date()
+        
+        switch (period) {
+          case 'daily':
+            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+            endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
+            break
+          case 'weekly': {
+            const weekDay = now.getDay()
+            startDate = new Date(now)
+            startDate.setDate(now.getDate() - weekDay)
+            startDate.setHours(0, 0, 0, 0)
+            endDate = new Date(startDate)
+            endDate.setDate(startDate.getDate() + 6)
+            endDate.setHours(23, 59, 59, 999)
+            break
+          }
+          case 'monthly':
+            startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
+            endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
+            break
+          case 'quarterly': {
+            const quarter = Math.floor(now.getMonth() / 3)
+            startDate = new Date(now.getFullYear(), quarter * 3, 1, 0, 0, 0, 0)
+            endDate = new Date(now.getFullYear(), (quarter + 1) * 3, 0, 23, 59, 59, 999)
+            break
+          }
+          case 'halfyear': {
+            const half = Math.floor(now.getMonth() / 6)
+            startDate = new Date(now.getFullYear(), half * 6, 1, 0, 0, 0, 0)
+            endDate = new Date(now.getFullYear(), (half + 1) * 6, 0, 23, 59, 59, 999)
+            break
+          }
+          case 'yearly':
+            startDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0)
+            endDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999)
+            break
+          default:
+            startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
+            endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
+        }
+        
+        dateRange = { startDate, endDate }
+      }
+      
+      // If period is 'all', fetch yearly data to get all periods for chart
+      const periodToFetch = period === 'all' ? 'yearly' : period
+      
+      console.log('📊 Fetching revenue summary for period:', period, '-> RPC period:', periodToFetch)
+      
       const { data: rpcData, error } = await supabase.rpc('get_revenue_summary', {
-        p_period_type: period,
+        p_period_type: periodToFetch,
       })
-      if (error) throw error
+      if (error) {
+        console.error('❌ RPC error:', error)
+        throw error
+      }
+
+      console.log('✅ RPC data received:', rpcData?.length, 'rows')
 
       const formatted = (rpcData || []).map((r: any) => ({
         summary_period: r.summary_period,
@@ -68,19 +129,128 @@ export default function DashboardBase({ role }: { role: string }) {
         pending_payment_percent: Number(r.pending_payment_percent ?? 0),
       }))
 
-      setData(formatted)
-      const total = formatted.find((d) => d.summary_period === 'TOTAL')
-      if (total) {
-        setTotals(prev => ({
-          totalOrders: total.total_orders,
-          totalRevenue: total.total_revenue,
-          totalFull: total.total_full,
-          totalPartial: total.total_partial,
-          totalPending: total.total_pending,
-          totalExpenses: prev.totalExpenses, // Keep existing value
-          totalDebts: prev.totalDebts, // Keep existing value
-        }))
+      // If 'all' is selected, filter out the TOTAL row and show all periods
+      const dataToSet = period === 'all' 
+        ? formatted.filter((d) => d.summary_period !== 'TOTAL')
+        : formatted
+
+      setData(dataToSet)
+      
+      // IMPORTANT: Calculate totals directly from orders for accurate period filtering
+      // This ensures the cards always show the correct period-filtered data
+      let calculatedTotals = {
+        totalOrders: 0,
+        totalRevenue: 0,
+        totalFull: 0,
+        totalPartial: 0,
+        totalPending: 0,
       }
+      
+      // Always calculate from orders to ensure period filtering works
+      try {
+        if (period === 'all') {
+          // For 'all', sum all orders
+          console.log('🔍 Fetching ALL orders for "all periods"')
+          const { data: allOrders, error: ordersError } = await supabase
+            .from('orders')
+            .select('total_amount, payment_status')
+          
+          if (ordersError) {
+            console.error('❌ Error fetching all orders:', ordersError)
+          } else {
+            console.log('✅ All orders fetched:', allOrders?.length || 0, 'orders')
+          }
+          
+          if (!ordersError && allOrders) {
+            calculatedTotals = allOrders.reduce((acc, order) => {
+              const amount = Number(order.total_amount || 0)
+              acc.totalOrders += 1
+              acc.totalRevenue += amount
+              
+              // Categorize by payment status
+              const paymentStatus = (order.payment_status || '').toLowerCase()
+              if (paymentStatus.includes('full') || paymentStatus === 'paid') {
+                acc.totalFull += amount
+              } else if (paymentStatus.includes('partial')) {
+                acc.totalPartial += amount
+              } else if (paymentStatus.includes('pending') || paymentStatus === 'unpaid') {
+                acc.totalPending += amount
+              }
+              
+              return acc
+            }, { totalOrders: 0, totalRevenue: 0, totalFull: 0, totalPartial: 0, totalPending: 0 })
+          }
+          
+          console.log('📊 All periods totals calculated from orders:', calculatedTotals)
+        } else if (dateRange) {
+          // For specific periods, filter orders by date range
+          console.log('🔍 Filtering orders by date range:', {
+            period,
+            startDate: dateRange.startDate.toISOString(),
+            endDate: dateRange.endDate.toISOString()
+          })
+          
+          const { data: periodOrders, error: ordersError } = await supabase
+            .from('orders')
+            .select('total_amount, payment_status, created_at')
+            .gte('created_at', dateRange.startDate.toISOString())
+            .lte('created_at', dateRange.endDate.toISOString())
+          
+          if (ordersError) {
+            console.error('❌ Error fetching orders:', ordersError)
+          } else {
+            console.log('✅ Orders fetched:', periodOrders?.length || 0, 'orders for period', period)
+            if (periodOrders && periodOrders.length > 0) {
+              console.log('📋 Sample orders:', periodOrders.slice(0, 3).map(o => ({
+                amount: o.total_amount,
+                status: o.payment_status,
+                date: o.created_at
+              })))
+            } else {
+              console.warn('⚠️ No orders found for period:', period, 'date range:', dateRange.startDate.toISOString(), 'to', dateRange.endDate.toISOString())
+            }
+          }
+          
+          if (!ordersError && periodOrders) {
+            calculatedTotals = periodOrders.reduce((acc, order) => {
+              const amount = Number(order.total_amount || 0)
+              acc.totalOrders += 1
+              acc.totalRevenue += amount
+              
+              // Categorize by payment status
+              const paymentStatus = (order.payment_status || '').toLowerCase()
+              if (paymentStatus.includes('full') || paymentStatus === 'paid') {
+                acc.totalFull += amount
+              } else if (paymentStatus.includes('partial')) {
+                acc.totalPartial += amount
+              } else if (paymentStatus.includes('pending') || paymentStatus === 'unpaid') {
+                acc.totalPending += amount
+              }
+              
+              return acc
+            }, { totalOrders: 0, totalRevenue: 0, totalFull: 0, totalPartial: 0, totalPending: 0 })
+          }
+          
+          console.log('📊 Period totals calculated from orders:', {
+            period,
+            dateRange: `${dateRange.startDate.toISOString()} to ${dateRange.endDate.toISOString()}`,
+            ordersCount: periodOrders?.length || 0,
+            totals: calculatedTotals
+          })
+        }
+      } catch (ordersErr) {
+        console.error('❌ Error calculating totals from orders:', ordersErr)
+      }
+      
+      console.log('💾 Setting totals state:', calculatedTotals)
+      
+      // Update totals with calculated values (these are accurate for the selected period)
+      setTotals(prev => ({
+        ...calculatedTotals,
+        totalExpenses: prev.totalExpenses, // Will be updated by expensesByPeriod
+        totalDebts: prev.totalDebts, // Will be updated by debtsByPeriod
+      }))
+      
       setLastUpdated(new Date())
     } catch (err) {
       console.error('Dashboard fetch error:', err)
@@ -174,6 +344,7 @@ export default function DashboardBase({ role }: { role: string }) {
   // Initial fetch and refetch on period change
   useEffect(() => {
     if (session) {
+      console.log('🔄 Period changed to:', period, '- Refetching all data...')
       fetchSummary()
       fetchActiveStaffCount()
       fetchExpenses()
@@ -287,95 +458,174 @@ export default function DashboardBase({ role }: { role: string }) {
     }
   }, [supabase, session, period]) // Include period so it refetches when period changes
 
+  // Helper function to get date range for the selected period
+  const getPeriodDateRange = useMemo(() => {
+    const now = new Date()
+    let startDate: Date
+    let endDate: Date = new Date()
+    
+    if (period === 'all') {
+      return null // No date filtering for 'all'
+    }
+    
+    switch (period) {
+      case 'daily':
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+        endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
+        break
+      case 'weekly': {
+        const weekDay = now.getDay()
+        startDate = new Date(now)
+        startDate.setDate(now.getDate() - weekDay)
+        startDate.setHours(0, 0, 0, 0)
+        endDate = new Date(startDate)
+        endDate.setDate(startDate.getDate() + 6)
+        endDate.setHours(23, 59, 59, 999)
+        break
+      }
+      case 'monthly':
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
+        break
+      case 'quarterly': {
+        const quarter = Math.floor(now.getMonth() / 3)
+        startDate = new Date(now.getFullYear(), quarter * 3, 1, 0, 0, 0, 0)
+        endDate = new Date(now.getFullYear(), (quarter + 1) * 3, 0, 23, 59, 59, 999)
+        break
+      }
+      case 'halfyear': {
+        const half = Math.floor(now.getMonth() / 6)
+        startDate = new Date(now.getFullYear(), half * 6, 1, 0, 0, 0, 0)
+        endDate = new Date(now.getFullYear(), (half + 1) * 6, 0, 23, 59, 59, 999)
+        break
+      }
+      case 'yearly':
+        startDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0)
+        endDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999)
+        break
+      default:
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
+    }
+    
+    return { startDate, endDate }
+  }, [period])
+
   // Group expenses by period (matching ReportsBase logic exactly)
+  // Filter by date range first, then group
   const expensesByPeriod = useMemo(() => {
     const grouped: Record<string, number> = {}
+    const dateRange = getPeriodDateRange
     
     expensesData.forEach((expense) => {
-      const date = new Date(expense.created_at)
+      const expenseDate = new Date(expense.created_at)
+      
+      // Filter by date range if period is not 'all'
+      if (dateRange && (expenseDate < dateRange.startDate || expenseDate > dateRange.endDate)) {
+        return // Skip this expense - it's outside the selected period
+      }
+      
       let key = ''
       
-      // Match the exact format used in ReportsBase
-      switch (period) {
-        case 'daily':
-          key = date.toISOString().split('T')[0] // YYYY-MM-DD
-          break
-        case 'weekly': {
-          const startOfWeek = new Date(date)
-          startOfWeek.setDate(date.getDate() - date.getDay())
-          key = startOfWeek.toISOString().split('T')[0]
-          break
+      // If 'all' is selected, use a single key to show all expenses together
+      if (period === 'all') {
+        key = 'all'
+      } else {
+        // Match the exact format used in ReportsBase
+        switch (period) {
+          case 'daily':
+            key = expenseDate.toISOString().split('T')[0] // YYYY-MM-DD
+            break
+          case 'weekly': {
+            const startOfWeek = new Date(expenseDate)
+            startOfWeek.setDate(expenseDate.getDate() - expenseDate.getDay())
+            key = startOfWeek.toISOString().split('T')[0]
+            break
+          }
+          case 'monthly':
+            key = `${expenseDate.getFullYear()}-${String(expenseDate.getMonth() + 1).padStart(2, '0')}`
+            break
+          case 'quarterly': {
+            const quarter = Math.floor(expenseDate.getMonth() / 3) + 1
+            key = `${expenseDate.getFullYear()}-Q${quarter}`
+            break
+          }
+          case 'halfyear': {
+            const half = expenseDate.getMonth() < 6 ? 'H1' : 'H2'
+            key = `${expenseDate.getFullYear()}-${half}`
+            break
+          }
+          case 'yearly':
+            key = String(expenseDate.getFullYear())
+            break
+          default:
+            key = `${expenseDate.getFullYear()}-${String(expenseDate.getMonth() + 1).padStart(2, '0')}`
         }
-        case 'monthly':
-          key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-          break
-        case 'quarterly': {
-          const quarter = Math.floor(date.getMonth() / 3) + 1
-          key = `${date.getFullYear()}-Q${quarter}`
-          break
-        }
-        case 'halfyear': {
-          const half = date.getMonth() < 6 ? 'H1' : 'H2'
-          key = `${date.getFullYear()}-${half}`
-          break
-        }
-        case 'yearly':
-          key = String(date.getFullYear())
-          break
-        default:
-          key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
       }
       
       grouped[key] = (grouped[key] || 0) + Number(expense.amount || 0)
     })
     
     return grouped
-  }, [expensesData, period])
+  }, [expensesData, period, getPeriodDateRange])
 
   // Group debts by period (same logic as expenses)
+  // Filter by date range first, then group
   const debtsByPeriod = useMemo(() => {
     const grouped: Record<string, number> = {}
+    const dateRange = getPeriodDateRange
     
     debtsData.forEach((debt) => {
-      const date = new Date(debt.created_at)
+      const debtDate = new Date(debt.created_at)
+      
+      // Filter by date range if period is not 'all'
+      if (dateRange && (debtDate < dateRange.startDate || debtDate > dateRange.endDate)) {
+        return // Skip this debt - it's outside the selected period
+      }
+      
       let key = ''
       
-      // Match the exact format used in ReportsBase
-      switch (period) {
-        case 'daily':
-          key = date.toISOString().split('T')[0] // YYYY-MM-DD
-          break
-        case 'weekly': {
-          const startOfWeek = new Date(date)
-          startOfWeek.setDate(date.getDate() - date.getDay())
-          key = startOfWeek.toISOString().split('T')[0]
-          break
+      // If 'all' is selected, use a single key to show all debts together
+      if (period === 'all') {
+        key = 'all'
+      } else {
+        // Match the exact format used in ReportsBase
+        switch (period) {
+          case 'daily':
+            key = debtDate.toISOString().split('T')[0] // YYYY-MM-DD
+            break
+          case 'weekly': {
+            const startOfWeek = new Date(debtDate)
+            startOfWeek.setDate(debtDate.getDate() - debtDate.getDay())
+            key = startOfWeek.toISOString().split('T')[0]
+            break
+          }
+          case 'monthly':
+            key = `${debtDate.getFullYear()}-${String(debtDate.getMonth() + 1).padStart(2, '0')}`
+            break
+          case 'quarterly': {
+            const quarter = Math.floor(debtDate.getMonth() / 3) + 1
+            key = `${debtDate.getFullYear()}-Q${quarter}`
+            break
+          }
+          case 'halfyear': {
+            const half = debtDate.getMonth() < 6 ? 'H1' : 'H2'
+            key = `${debtDate.getFullYear()}-${half}`
+            break
+          }
+          case 'yearly':
+            key = String(debtDate.getFullYear())
+            break
+          default:
+            key = `${debtDate.getFullYear()}-${String(debtDate.getMonth() + 1).padStart(2, '0')}`
         }
-        case 'monthly':
-          key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-          break
-        case 'quarterly': {
-          const quarter = Math.floor(date.getMonth() / 3) + 1
-          key = `${date.getFullYear()}-Q${quarter}`
-          break
-        }
-        case 'halfyear': {
-          const half = date.getMonth() < 6 ? 'H1' : 'H2'
-          key = `${date.getFullYear()}-${half}`
-          break
-        }
-        case 'yearly':
-          key = String(date.getFullYear())
-          break
-        default:
-          key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
       }
       
       grouped[key] = (grouped[key] || 0) + Number(debt.amount || 0)
     })
     
     return grouped
-  }, [debtsData, period])
+  }, [debtsData, period, getPeriodDateRange])
 
   // Calculate total expenses - sum from expensesByPeriod (matches what graph shows)
   // The graph uses expensesByPeriod, so the card should too to ensure consistency
@@ -519,92 +769,106 @@ export default function DashboardBase({ role }: { role: string }) {
       }
     })
 
-    // Add expense-only periods if any (only those in current period)
-    const now = new Date()
-    let periodStartDate: Date
-    switch (period) {
-      case 'daily':
-        periodStartDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
-        break
-      case 'weekly': {
-        const weekDay = now.getDay()
-        periodStartDate = new Date(now)
-        periodStartDate.setDate(now.getDate() - weekDay)
-        periodStartDate.setHours(0, 0, 0, 0)
-        break
-      }
-      case 'monthly':
-        periodStartDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
-        break
-      case 'quarterly':
-        const quarter = Math.floor(now.getMonth() / 3)
-        periodStartDate = new Date(now.getFullYear(), quarter * 3, 1, 0, 0, 0, 0)
-        break
-      case 'halfyear':
-        const half = Math.floor(now.getMonth() / 6)
-        periodStartDate = new Date(now.getFullYear(), half * 6, 1, 0, 0, 0, 0)
-        break
-      case 'yearly':
-        periodStartDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0)
-        break
-      default:
-        periodStartDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
-    }
-
-    // Only add expense periods that don't have revenue but are in the current period
-    Object.entries(expensesByPeriod).forEach(([expenseKey, amount]) => {
-      if (amount > 0 && !mergedData.find((d) => {
-        const mappedKey = mapRevenuePeriodToExpenseKey(d.summary_period || '')
-        return mappedKey === expenseKey || d.summary_period === expenseKey
-      })) {
-        // Check if this expense period falls within the selected period
-        try {
-          let expenseDate: Date | null = null
-          if (expenseKey.match(/^\d{4}-\d{2}-\d{2}$/)) {
-            // Daily format YYYY-MM-DD
-            expenseDate = new Date(expenseKey)
-          } else if (expenseKey.match(/^\d{4}-\d{2}$/)) {
-            // Monthly format YYYY-MM
-            const [year, month] = expenseKey.split('-')
-            expenseDate = new Date(parseInt(year), parseInt(month) - 1, 1)
-          } else if (expenseKey.match(/^\d{4}-Q\d$/)) {
-            // Quarterly format YYYY-QN
-            const [year, q] = expenseKey.split('-Q')
-            expenseDate = new Date(parseInt(year), (parseInt(q) - 1) * 3, 1)
-          } else if (expenseKey.match(/^\d{4}-H[12]$/)) {
-            // Half-year format YYYY-HN
-            const [year, h] = expenseKey.split('-H')
-            expenseDate = new Date(parseInt(year), h === '1' ? 0 : 6, 1)
-          } else if (expenseKey.match(/^\d{4}$/)) {
-            // Yearly format
-            expenseDate = new Date(parseInt(expenseKey), 0, 1)
-          }
-          
-          if (expenseDate && expenseDate >= periodStartDate) {
-            const debtAmount = debtsByPeriod[expenseKey] || 0
-            // For expense-only periods (no revenue), percentage is 0 since there's no revenue to compare
-            mergedData.push({
-              summary_period: expenseKey,
-              total_revenue: 0,
-              total_full: 0,
-              total_partial: 0,
-              total_pending: 0,
-              total_orders: 0,
-              total_expenses: amount,
-              total_expenses_percent: 0, // No revenue means 0%
-              total_debts: debtAmount,
-              total_debts_percent: 0, // No revenue means 0%
-              // Add percentage fields for consistency (all 0 since no revenue)
-              full_payment_percent: 0,
-              partial_payment_percent: 0,
-              pending_payment_percent: 0,
-            })
-          }
-        } catch {
-          // Invalid date format, skip
+    // Handle 'all' period - add expenses and debts as a single entry
+    if (period === 'all') {
+      const allExpenses = expensesByPeriod['all'] || 0
+      const allDebts = debtsByPeriod['all'] || 0
+      
+      // Calculate totals from all revenue data
+      const totalRevenue = mergedData.reduce((sum, item) => sum + (item.total_revenue || 0), 0)
+      const expensePercent = totalRevenue > 0 ? ((allExpenses / totalRevenue) * 100).toFixed(2) : 0
+      const debtPercent = totalRevenue > 0 ? ((allDebts / totalRevenue) * 100).toFixed(2) : 0
+      
+      // Don't add a separate entry for expenses/debts when 'all' is selected
+      // They're already included in the totals calculation
+    } else {
+      // Add expense-only periods if any (only those in current period)
+      const now = new Date()
+      let periodStartDate: Date
+      switch (period) {
+        case 'daily':
+          periodStartDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+          break
+        case 'weekly': {
+          const weekDay = now.getDay()
+          periodStartDate = new Date(now)
+          periodStartDate.setDate(now.getDate() - weekDay)
+          periodStartDate.setHours(0, 0, 0, 0)
+          break
         }
+        case 'monthly':
+          periodStartDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
+          break
+        case 'quarterly':
+          const quarter = Math.floor(now.getMonth() / 3)
+          periodStartDate = new Date(now.getFullYear(), quarter * 3, 1, 0, 0, 0, 0)
+          break
+        case 'halfyear':
+          const half = Math.floor(now.getMonth() / 6)
+          periodStartDate = new Date(now.getFullYear(), half * 6, 1, 0, 0, 0, 0)
+          break
+        case 'yearly':
+          periodStartDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0)
+          break
+        default:
+          periodStartDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
       }
-    })
+
+      // Only add expense periods that don't have revenue but are in the current period
+      Object.entries(expensesByPeriod).forEach(([expenseKey, amount]) => {
+        if (amount > 0 && !mergedData.find((d) => {
+          const mappedKey = mapRevenuePeriodToExpenseKey(d.summary_period || '')
+          return mappedKey === expenseKey || d.summary_period === expenseKey
+        })) {
+          // Check if this expense period falls within the selected period
+          try {
+            let expenseDate: Date | null = null
+            if (expenseKey.match(/^\d{4}-\d{2}-\d{2}$/)) {
+              // Daily format YYYY-MM-DD
+              expenseDate = new Date(expenseKey)
+            } else if (expenseKey.match(/^\d{4}-\d{2}$/)) {
+              // Monthly format YYYY-MM
+              const [year, month] = expenseKey.split('-')
+              expenseDate = new Date(parseInt(year), parseInt(month) - 1, 1)
+            } else if (expenseKey.match(/^\d{4}-Q\d$/)) {
+              // Quarterly format YYYY-QN
+              const [year, q] = expenseKey.split('-Q')
+              expenseDate = new Date(parseInt(year), (parseInt(q) - 1) * 3, 1)
+            } else if (expenseKey.match(/^\d{4}-H[12]$/)) {
+              // Half-year format YYYY-HN
+              const [year, h] = expenseKey.split('-H')
+              expenseDate = new Date(parseInt(year), h === '1' ? 0 : 6, 1)
+            } else if (expenseKey.match(/^\d{4}$/)) {
+              // Yearly format
+              expenseDate = new Date(parseInt(expenseKey), 0, 1)
+            }
+            
+            if (expenseDate && expenseDate >= periodStartDate) {
+              const debtAmount = debtsByPeriod[expenseKey] || 0
+              // For expense-only periods (no revenue), percentage is 0 since there's no revenue to compare
+              mergedData.push({
+                summary_period: expenseKey,
+                total_revenue: 0,
+                total_full: 0,
+                total_partial: 0,
+                total_pending: 0,
+                total_orders: 0,
+                total_expenses: amount,
+                total_expenses_percent: 0, // No revenue means 0%
+                total_debts: debtAmount,
+                total_debts_percent: 0, // No revenue means 0%
+                // Add percentage fields for consistency (all 0 since no revenue)
+                full_payment_percent: 0,
+                partial_payment_percent: 0,
+                pending_payment_percent: 0,
+              })
+            }
+          } catch {
+            // Invalid date format, skip
+          }
+        }
+      })
+    }
 
     // Sort by period
     mergedData.sort((a, b) => a.summary_period.localeCompare(b.summary_period))
@@ -683,7 +947,7 @@ export default function DashboardBase({ role }: { role: string }) {
 
       {/* Period Buttons */}
       <div className="flex flex-wrap justify-center sm:justify-start gap-2">
-        {['daily', 'weekly', 'monthly', 'quarterly', 'halfyear', 'yearly'].map((p) => (
+        {['daily', 'weekly', 'monthly', 'quarterly', 'halfyear', 'yearly', 'all'].map((p) => (
           <Button
             key={p}
             variant={p === period ? 'default' : 'outline'}
@@ -691,7 +955,7 @@ export default function DashboardBase({ role }: { role: string }) {
             onClick={() => setPeriod(p as any)}
             className="flex-1 sm:flex-none min-w-[80px]"
           >
-            {p.charAt(0).toUpperCase() + p.slice(1)}
+            {p === 'all' ? 'All Periods' : p.charAt(0).toUpperCase() + p.slice(1)}
           </Button>
         ))}
       </div>
@@ -708,18 +972,48 @@ export default function DashboardBase({ role }: { role: string }) {
             <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">All team members</p>
           </CardContent>
         </Card>
-        <Card><CardContent className="p-3 sm:p-4"><p className="text-xs sm:text-sm text-muted-foreground">Total Revenue</p><h2 className="text-lg sm:text-2xl font-bold">{formatCurrency(totals.totalRevenue)}</h2></CardContent></Card>
-        <Card><CardContent className="p-3 sm:p-4"><p className="text-xs sm:text-sm text-muted-foreground">Total Orders</p><h2 className="text-lg sm:text-2xl font-bold">{totals.totalOrders}</h2></CardContent></Card>
-        <Card><CardContent className="p-3 sm:p-4"><p className="text-xs sm:text-sm text-muted-foreground">Full Payments</p><h2 className="text-lg sm:text-2xl font-bold text-green-600">{formatCurrency(totals.totalFull)}</h2></CardContent></Card>
-        <Card><CardContent className="p-3 sm:p-4"><p className="text-xs sm:text-sm text-muted-foreground">Partial Payments</p><h2 className="text-lg sm:text-2xl font-bold text-yellow-600">{formatCurrency(totals.totalPartial)}</h2></CardContent></Card>
-        <Card><CardContent className="p-3 sm:p-4"><p className="text-xs sm:text-sm text-muted-foreground">Pending Payments</p><h2 className="text-lg sm:text-2xl font-bold text-red-600">{formatCurrency(totals.totalPending)}</h2></CardContent></Card>
+        <Card>
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-xs sm:text-sm text-muted-foreground">Total Revenue</p>
+            <h2 className="text-lg sm:text-2xl font-bold">{formatCurrency(totals.totalRevenue)}</h2>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">{period === 'all' ? 'All periods' : period.charAt(0).toUpperCase() + period.slice(1)}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-xs sm:text-sm text-muted-foreground">Total Orders</p>
+            <h2 className="text-lg sm:text-2xl font-bold">{totals.totalOrders}</h2>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">{period === 'all' ? 'All periods' : period.charAt(0).toUpperCase() + period.slice(1)}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-xs sm:text-sm text-muted-foreground">Full Payments</p>
+            <h2 className="text-lg sm:text-2xl font-bold text-green-600">{formatCurrency(totals.totalFull)}</h2>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">{period === 'all' ? 'All periods' : period.charAt(0).toUpperCase() + period.slice(1)}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-xs sm:text-sm text-muted-foreground">Partial Payments</p>
+            <h2 className="text-lg sm:text-2xl font-bold text-yellow-600">{formatCurrency(totals.totalPartial)}</h2>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">{period === 'all' ? 'All periods' : period.charAt(0).toUpperCase() + period.slice(1)}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-xs sm:text-sm text-muted-foreground">Pending Payments</p>
+            <h2 className="text-lg sm:text-2xl font-bold text-red-600">{formatCurrency(totals.totalPending)}</h2>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">{period === 'all' ? 'All periods' : period.charAt(0).toUpperCase() + period.slice(1)}</p>
+          </CardContent>
+        </Card>
         <Card className="bg-gradient-to-br from-purple-500/10 to-purple-600/10 border-purple-500/20">
           <CardContent className="p-3 sm:p-4">
             <p className="text-xs sm:text-sm text-muted-foreground">Total Expenses</p>
             <h2 className="text-lg sm:text-2xl font-bold text-purple-600">
               {formatCurrency(Number(totals.totalExpenses) || 0)}
             </h2>
-            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">All expenses</p>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">{period === 'all' ? 'All periods' : period.charAt(0).toUpperCase() + period.slice(1)}</p>
           </CardContent>
         </Card>
         <Card className="bg-gradient-to-br from-red-500/10 to-red-600/10 border-red-500/20">
@@ -728,7 +1022,7 @@ export default function DashboardBase({ role }: { role: string }) {
             <h2 className="text-lg sm:text-2xl font-bold text-red-600">
               {formatCurrency(Number(totals.totalDebts) || 0)}
             </h2>
-            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Completed orders pending payment</p>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">{period === 'all' ? 'All periods' : period.charAt(0).toUpperCase() + period.slice(1)}</p>
           </CardContent>
         </Card>
       </div>
@@ -738,7 +1032,7 @@ export default function DashboardBase({ role }: { role: string }) {
         <CardContent className="p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mb-4">
             <h3 className="text-base sm:text-lg font-semibold text-center sm:text-left">
-              Revenue & Expenses Breakdown ({period})
+              Revenue & Expenses Breakdown ({period === 'all' ? 'All Periods' : period})
             </h3>
             <div className="flex flex-wrap justify-center sm:justify-end gap-2">
               <Button variant="outline" size="sm" onClick={() => setChartType((p) => (p === 'line' ? 'bar' : 'line'))}>
