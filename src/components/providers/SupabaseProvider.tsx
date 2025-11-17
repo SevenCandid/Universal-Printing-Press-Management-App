@@ -22,9 +22,12 @@ export const SupabaseProvider = ({
   const [session, setSession] = useState<Session | null>(initialSession)
 
   useEffect(() => {
-    // 🔹 Fetch the current session on mount to prevent "Auth session missing!" errors
-    supabase.auth.getSession().then(({ data }) => {
-      if (data?.session) setSession(data.session)
+    // 🔹 Fetch the current user on mount (secure method)
+    supabase.auth.getUser().then(({ data }) => {
+      if (data?.user) {
+        // Get session from auth state change listener instead
+        // This is handled by the listener below
+      }
     })
 
     // 🔹 Keep session updated whenever auth state changes

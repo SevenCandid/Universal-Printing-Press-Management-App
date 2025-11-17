@@ -159,25 +159,102 @@ export default function EnquiriesBase() {
       }
 
       // Now mark the enquiry as converted
-      const { error: updateError } = await supabase
-        .from('enquiries')
-        .update({ 
-          converted_to_order: true, 
-          status: 'converted'
-        })
-        .eq('id', id)
+      try {
+        const { data: updatedEnquiry, error: updateError } = await supabase
+          .from('enquiries')
+          .update({ 
+            converted_to_order: true, 
+            status: 'converted'
+          })
+          .eq('id', id)
+          .select()
+          .single()
 
-      if (updateError) {
-        toast.error('Order created but failed to update enquiry status.')
+        if (updateError) {
+          // Enhanced error logging with full error object
+          const errorInfo = {
+            error: updateError,
+            message: updateError?.message || 'Unknown error',
+            details: updateError?.details || 'No details',
+            hint: updateError?.hint || 'No hint',
+            code: updateError?.code || 'No code',
+            enquiryId: id,
+            errorString: JSON.stringify(updateError, null, 2)
+          }
+          console.error('Update enquiry error:', errorInfo)
+          
+          // Try to update only converted_to_order if status column doesn't exist
+          if (updateError?.message?.includes('column') || updateError?.code === '42703') {
+            console.warn('Status column may not exist, trying to update only converted_to_order')
+            const { error: fallbackError } = await supabase
+              .from('enquiries')
+              .update({ converted_to_order: true })
+              .eq('id', id)
+            
+            if (fallbackError) {
+              const errorMsg = fallbackError?.message || 'Failed to update enquiry status'
+              toast.error(`Order created but failed to update enquiry: ${errorMsg}`)
+              setConvertingId(null)
+              return
+            }
+            // Fallback succeeded, continue with success flow
+            toast.success(
+              `✅ Enquiry converted to Order ${orderNumber}!\n\nYou can find it in Orders page.`,
+              { duration: 5000 }
+            )
+            setEnquiries(prevEnquiries => 
+              prevEnquiries.map(e => 
+                e.id === id 
+                  ? { ...e, converted_to_order: true, status: 'converted' }
+                  : e
+              )
+            )
+            await fetchEnquiries()
+            setConvertingId(null)
+            return
+          } else {
+            // Extract error message from various possible locations
+            const errorMsg = updateError?.message || 
+                           updateError?.details || 
+                           updateError?.hint || 
+                           (typeof updateError === 'string' ? updateError : 'Unknown error occurred')
+            toast.error(`Order created but failed to update enquiry status: ${errorMsg}`)
+            setConvertingId(null)
+            return
+          }
+        }
+
+        // Success - enquiry updated
+        console.log('Enquiry updated successfully:', updatedEnquiry)
+        
+        // Update the local state immediately for instant UI feedback
+        setEnquiries(prevEnquiries => 
+          prevEnquiries.map(e => 
+            e.id === id 
+              ? { ...e, converted_to_order: true, status: 'converted' }
+              : e
+          )
+        )
+
+        toast.success(
+          `✅ Enquiry converted to Order ${orderNumber}!\n\nYou can find it in Orders page.`,
+          { duration: 5000 }
+        )
+        
+        // Refresh from server to ensure consistency
+        await fetchEnquiries()
+      } catch (updateException: any) {
+        // Catch any unexpected errors during the update
+        console.error('Exception during enquiry update:', {
+          exception: updateException,
+          message: updateException?.message || 'Unknown exception',
+          stack: updateException?.stack,
+          enquiryId: id
+        })
+        toast.error(`Order created but failed to update enquiry: ${updateException?.message || 'Unexpected error'}`)
         setConvertingId(null)
         return
       }
-
-      toast.success(
-        `✅ Enquiry converted to Order ${orderNumber}!\n\nYou can find it in Orders page.`,
-        { duration: 5000 }
-      )
-      fetchEnquiries()
     } catch (error: any) {
       console.error('Conversion error:', error)
       toast.error('Failed to convert enquiry to order.')
@@ -227,20 +304,32 @@ export default function EnquiriesBase() {
       <div className="flex flex-wrap justify-between items-center mb-6 gap-3">
         <h1 className="text-3xl font-bold">📋 Enquiries Base</h1>
 
-        {/* Period Filter */}
-        <div className="flex items-center gap-2">
-          <label className="text-sm font-medium">Period:</label>
-          <select
-            value={periodFilter}
-            onChange={(e) => setPeriodFilter(e.target.value)}
-            className="border rounded-md px-2 py-1 text-sm"
+        <div className="flex items-center gap-3">
+          {/* Period Filter */}
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium">Period:</label>
+            <select
+              value={periodFilter}
+              onChange={(e) => setPeriodFilter(e.target.value)}
+              className="border rounded-md px-2 py-1 text-sm"
+            >
+              <option value="all">All</option>
+              <option value="daily">Today</option>
+              <option value="weekly">This Week</option>
+              <option value="monthly">This Month</option>
+              <option value="yearly">This Year</option>
+            </select>
+          </div>
+
+          {/* Refresh Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fetchEnquiries()}
+            disabled={loading}
           >
-            <option value="all">All</option>
-            <option value="daily">Today</option>
-            <option value="weekly">This Week</option>
-            <option value="monthly">This Month</option>
-            <option value="yearly">This Year</option>
-          </select>
+            {loading ? 'Refreshing...' : '🔄 Refresh'}
+          </Button>
         </div>
 
         <Dialog>
@@ -291,11 +380,29 @@ export default function EnquiriesBase() {
         <p>Loading enquiries...</p>
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {enquiries.map((enquiry) => (
-            <Card key={enquiry.id} className="shadow-lg">
+          {enquiries.map((enquiry) => {
+            // Check both converted_to_order and status for converted enquiries
+            const isConverted = enquiry.converted_to_order === true || enquiry.status === 'converted'
+            
+            return (
+            <Card 
+              key={enquiry.id} 
+              className={`shadow-lg ${
+                isConverted
+                  ? 'bg-green-50 dark:bg-green-950/20 border-green-300 dark:border-green-800 border-2' 
+                  : ''
+              }`}
+            >
               <CardHeader>
-                <CardTitle>{enquiry.client_name}</CardTitle>
-                <p className="text-sm text-gray-500">{enquiry.contact_number || 'No contact'}</p>
+                <CardTitle className={isConverted ? 'text-green-700 dark:text-green-300' : ''}>
+                  {enquiry.client_name}
+                  {isConverted && (
+                    <span className="ml-2 text-sm font-normal">✓ Converted</span>
+                  )}
+                </CardTitle>
+                <p className={`text-sm ${isConverted ? 'text-green-600 dark:text-green-400' : 'text-gray-500'}`}>
+                  {enquiry.contact_number || 'No contact'}
+                </p>
               </CardHeader>
               <CardContent>
                 <p className="mb-2">{enquiry.message}</p>
@@ -325,7 +432,7 @@ export default function EnquiriesBase() {
                     </Button>
                   )}
 
-                  {!enquiry.converted_to_order ? (
+                  {!isConverted ? (
                     <Button 
                       variant="default" 
                       size="sm" 
@@ -336,7 +443,9 @@ export default function EnquiriesBase() {
                       {convertingId === enquiry.id ? 'Converting...' : 'Convert to Order'}
                     </Button>
                   ) : (
-                    <span className="text-green-600 font-semibold">✅ Converted</span>
+                    <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-300 dark:border-green-700">
+                      ✅ Converted
+                    </span>
                   )}
                 </div>
 
@@ -360,7 +469,8 @@ export default function EnquiriesBase() {
                 )}
               </CardContent>
             </Card>
-          ))}
+            )
+          })}
         </div>
       )}
 

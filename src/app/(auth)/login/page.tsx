@@ -39,15 +39,22 @@ export default function LoginPage() {
     const checkSession = async () => {
       if (redirected) return
 
+      // Use getUser() for secure authentication check
       const {
-        data: { session },
-      } = await supabase.auth.getSession()
+        data: { user },
+        error: authError
+      } = await supabase.auth.getUser()
 
-      if (session?.user) {
+      if (authError || !user) {
+        setCheckingSession(false)
+        return
+      }
+
+      if (user) {
         let { data: profile, error } = await supabase
           .from('profiles')
           .select('role, name, email')
-          .eq('id', session.user.id)
+          .eq('id', user.id)
           .maybeSingle()
 
         if (error) {
@@ -57,16 +64,16 @@ export default function LoginPage() {
           return
         }
 
-        // ⚡ Auto-create profile if it doesn’t exist
+        // ⚡ Auto-create profile if it doesn't exist
         if (!profile) {
           const { data: newProfile, error: insertError } = await supabase
             .from('profiles')
             .insert([
               {
-                id: session.user.id,
-                email: session.user.email,
+                id: user.id,
+                email: user.email,
                 role: 'staff',
-                name: session.user.user_metadata?.full_name || null,
+                name: user.user_metadata?.full_name || null,
               },
             ])
             .select('role, name, email')

@@ -110,6 +110,19 @@ type LeaveRequest = {
   days_requested?: number
 }
 
+// ⚠️ ATTENDANCE SYSTEM - MANUAL CHECK-OUT ONLY
+// ============================================================================
+// IMPORTANT: This system ensures users remain checked in until they manually check out.
+// There is NO automatic checkout - users must explicitly click "Check Out" to end their session.
+// 
+// Behavior:
+// - Check-in: Creates record with status='checked_in' and check_out=NULL
+// - Status persists: Record remains 'checked_in' until user manually checks out
+// - Check-out: ONLY happens when user explicitly clicks "Check Out" button
+// - No timers: No automatic checkouts after time periods
+// - No end-of-day: No automatic checkouts at midnight or end of day
+// ============================================================================
+
 export default function AttendanceBase({ role }: { role: string }) {
   const { supabase, session } = useSupabase()
   const [mounted, setMounted] = useState(false)
@@ -447,6 +460,8 @@ export default function AttendanceBase({ role }: { role: string }) {
   }
 
   // 📅 Fetch today's attendance record for current user (independent of filters)
+  // ⚠️ IMPORTANT: This function ONLY reads the record - it NEVER modifies it
+  // The user's check-in status will persist until they manually check out
   const fetchTodayRecord = async () => {
     if (!session?.user || !supabase) {
       console.log('⚠️ fetchTodayRecord skipped - session or supabase not ready:', {
@@ -466,6 +481,8 @@ export default function AttendanceBase({ role }: { role: string }) {
       console.log('🔍 Fetching today\'s record for:', session.user.id)
       console.log('📅 Date range:', todayStart.toISOString(), 'to', todayEnd.toISOString())
       
+      // ⚠️ READ-ONLY query: This only fetches the record, never modifies it
+      // The record's status will remain 'checked_in' until user manually checks out
       const { data, error } = await supabase
         .from('attendance')
         .select('*')
@@ -1105,6 +1122,9 @@ export default function AttendanceBase({ role }: { role: string }) {
             gpsAccuracy: Math.round(pos.coords.accuracy)
           })
 
+          // ⚠️ IMPORTANT: Check-in creates a record with status 'checked_in' and NO check_out time
+          // The user will remain checked in until they manually check out
+          // There is NO automatic checkout - the user must explicitly click "Check Out"
           const { data, error } = await supabase
             .from('attendance')
             .insert([
@@ -1113,7 +1133,8 @@ export default function AttendanceBase({ role }: { role: string }) {
                 check_in: new Date().toISOString(),
                 latitude,
                 longitude,
-                status: 'checked_in',
+                status: 'checked_in', // ✅ Status remains 'checked_in' until manual checkout
+                // check_out is intentionally NULL - will only be set when user manually checks out
                 distance_from_office: Math.round(distance),
                 gps_accuracy: Math.round(pos.coords.accuracy),
               },
@@ -1232,9 +1253,19 @@ export default function AttendanceBase({ role }: { role: string }) {
     )
   }
 
+  // ⚠️ IMPORTANT: Check-out can ONLY happen when user explicitly clicks "Check Out"
+  // There is NO automatic checkout - the user must manually trigger this function
+  // The system will NEVER automatically change status from 'checked_in' to 'checked_out'
   const handleCheckOut = async () => {
     if (!session?.user) {
       toast.error('Please sign in first')
+      return
+    }
+
+    // ⚠️ SAFETY CHECK: Ensure user has an active check-in before allowing checkout
+    if (!todayRecord || todayRecord.status === 'checked_out' || todayRecord.check_out) {
+      toast.error('No active check-in found. You must check in first.')
+      setCheckingOut(false)
       return
     }
 
@@ -1341,16 +1372,20 @@ export default function AttendanceBase({ role }: { role: string }) {
           })
 
           try {
+            // ⚠️ IMPORTANT: This is the ONLY place where status changes to 'checked_out'
+            // This update ONLY happens when user explicitly clicks "Check Out"
+            // The system will NEVER automatically perform this update
             const checkOutTime = new Date().toISOString()
             const { error } = await supabase
               .from('attendance')
               .update({
-                check_out: checkOutTime,
-                status: 'checked_out',
+                check_out: checkOutTime, // ✅ Set checkout time only when user manually checks out
+                status: 'checked_out', // ✅ Change status only when user manually checks out
                 checkout_distance: Math.round(distance),
                 checkout_gps_accuracy: Math.round(pos.coords.accuracy),
               })
               .eq('id', lastRecord.id)
+              .eq('status', 'checked_in') // ✅ Safety check: Only update if currently checked_in
 
             if (error) {
               console.error('Check-out error details:', {

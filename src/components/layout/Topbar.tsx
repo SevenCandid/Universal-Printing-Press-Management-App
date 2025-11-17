@@ -1,11 +1,9 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Bars3Icon,
-  CameraIcon,
-  TrashIcon,
   ArrowPathIcon,
 } from '@heroicons/react/24/outline'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
@@ -29,6 +27,7 @@ const roleLinks: Record<string, { name: string; href: string }[]> = {
   ceo: [
     { name: 'Dashboard', href: '/ceo/dashboard' },
     { name: 'Orders', href: '/ceo/orders' },
+    { name: 'Client Connect', href: '/ceo/clientconnect' },
     { name: 'Tasks', href: '/ceo/tasks' },
     { name: 'Sales Reports', href: '/ceo/sales-reports' },
     { name: 'Staff', href: '/ceo/staff' },
@@ -36,37 +35,45 @@ const roleLinks: Record<string, { name: string; href: string }[]> = {
   ],
   manager: [
     { name: 'Dashboard', href: '/manager/dashboard' },
+    { name: 'Orders', href: '/manager/orders' },
+    { name: 'Client Connect', href: '/manager/clientconnect' },
     { name: 'Tasks', href: '/manager/tasks' },
     { name: 'Reports', href: '/manager/reports' },
   ],
   executive_assistant: [
     { name: 'Dashboard', href: '/executive_assistant/dashboard' },
     { name: 'Orders', href: '/executive_assistant/orders' },
+    { name: 'Client Connect', href: '/executive_assistant/clientconnect' },
     { name: 'Tasks', href: '/executive_assistant/tasks' },
     { name: 'Staff', href: '/executive_assistant/staff' },
     { name: 'Reports', href: '/executive_assistant/reports' },
   ],
   staff: [
     { name: 'Dashboard', href: '/staff/dashboard' },
-    { name: 'My Tasks', href: '/staff/tasks' },
     { name: 'Orders', href: '/staff/orders' },
+    { name: 'Client Connect', href: '/staff/clientconnect' },
+    { name: 'My Tasks', href: '/staff/tasks' },
     { name: 'Reports', href: '/staff/reports' },
   ],
   intern: [
     { name: 'Dashboard', href: '/intern/dashboard' },
-    { name: 'My Tasks', href: '/intern/tasks' },
     { name: 'Orders', href: '/intern/orders' },
+    { name: 'Client Connect', href: '/intern/clientconnect' },
+    { name: 'My Tasks', href: '/intern/tasks' },
     { name: 'Reports', href: '/intern/reports' },
   ],
   sales_representative: [
     { name: 'Dashboard', href: '/sales_representative/dashboard' },
+    { name: 'Orders', href: '/sales_representative/orders' },
+    { name: 'Client Connect', href: '/sales_representative/clientconnect' },
     { name: 'My Tasks', href: '/sales_representative/tasks' },
     { name: 'Daily Reports', href: '/sales_representative/daily-reports' },
-    { name: 'Orders', href: '/sales_representative/orders' },
     { name: 'Reports', href: '/sales_representative/reports' },
   ],
   board: [
     { name: 'Dashboard', href: '/board/dashboard' },
+    { name: 'Orders', href: '/board/orders' },
+    { name: 'Client Connect', href: '/board/clientconnect' },
     { name: 'Reports', href: '/board/reports' },
   ],
 }
@@ -82,7 +89,6 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
   const [email, setEmail] = useState<string | null>(null)
   const [avatarUrl, setAvatarUrl] = useState<string>(defaultAvatar)
   const [mounted, setMounted] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => setMounted(true), [])
 
@@ -121,62 +127,6 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
     localStorage.clear()
     toast.success('Logged out successfully')
     router.replace('/login')
-  }
-
-  const handleAvatarChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
-    const { data: userData } = await supabase.auth.getUser()
-    const user = userData?.user
-    if (!user) return
-
-    const fileExt = file.name.split('.').pop()
-    const filePath = `${user.id}-${Date.now()}.${fileExt}`
-
-    const { error: uploadError } = await supabase.storage
-      .from('avatars')
-      .upload(filePath, file, { upsert: true })
-
-    if (uploadError) {
-      toast.error('Failed to upload image')
-      return
-    }
-
-    const { data } = supabase.storage.from('avatars').getPublicUrl(filePath)
-    const publicUrl = data.publicUrl
-
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({ avatar_url: publicUrl })
-      .eq('id', user.id)
-
-    if (updateError) {
-      toast.error('Failed to update profile')
-      return
-    }
-
-    setAvatarUrl(publicUrl)
-    toast.success('Profile picture updated!')
-  }
-
-  const handleRemoveAvatar = async () => {
-    const { data: userData } = await supabase.auth.getUser()
-    const user = userData?.user
-    if (!user) return
-
-    const { error } = await supabase
-      .from('profiles')
-      .update({ avatar_url: null })
-      .eq('id', user.id)
-
-    if (error) {
-      toast.error('Failed to remove image')
-      return
-    }
-
-    setAvatarUrl(defaultAvatar)
-    toast.success('Profile picture removed')
   }
 
   const pages = role && roleLinks[role] ? roleLinks[role] : []
@@ -287,24 +237,6 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
             <DropdownMenuSeparator />
 
             <DropdownMenuItem
-              onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-2"
-            >
-              <CameraIcon className="w-4 h-4" />
-              Upload New Photo
-            </DropdownMenuItem>
-
-            <DropdownMenuItem
-              onClick={handleRemoveAvatar}
-              className="flex items-center gap-2 text-destructive focus:text-destructive"
-            >
-              <TrashIcon className="w-4 h-4" />
-              Remove Photo
-            </DropdownMenuItem>
-
-            <DropdownMenuSeparator />
-
-            <DropdownMenuItem
               onClick={handleLogout}
               className="text-destructive focus:text-destructive"
             >
@@ -312,14 +244,6 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-
-        <input
-          type="file"
-          accept="image/*"
-          ref={fileInputRef}
-          className="hidden"
-          onChange={handleAvatarChange}
-        />
       </div>
     </header>
   )

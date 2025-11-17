@@ -6,6 +6,12 @@ const withPWA = require('next-pwa')({
   disable: process.env.NODE_ENV === 'development', // Disable in dev for easier debugging
   buildExcludes: [/app-build-manifest\.json$/, /_middleware\.js$/],
   publicExcludes: ['!robots.txt', '!sitemap.xml'],
+  fallbacks: {
+    document: '/offline',
+  },
+  // Suppress precaching errors for missing chunks (common in dev when chunks change)
+  navigateFallback: '/offline',
+  navigateFallbackDenylist: [/^\/api\/.*$/, /^\/_next\/.*$/],
   runtimeCaching: [
     {
       urlPattern: /^https:\/\/fonts\.(?:gstatic)\.com\/.*/i,

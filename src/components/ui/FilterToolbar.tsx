@@ -1,7 +1,7 @@
 'use client'
 
-import React from 'react'
-import { PlusIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline'
+import React, { useState, useRef, useEffect } from 'react'
+import { PlusIcon, ArrowDownTrayIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
 
 interface FilterToolbarProps {
   search: string
@@ -18,7 +18,7 @@ interface FilterToolbarProps {
   onPeriodChange: (value: string) => void
   canAddNew?: boolean
   onAddNew?: () => void
-  onExport?: () => void
+  onExport?: (format: 'pdf' | 'csv') => void
 }
 
 export const FilterToolbar: React.FC<FilterToolbarProps> = ({
@@ -38,6 +38,26 @@ export const FilterToolbar: React.FC<FilterToolbarProps> = ({
   onAddNew,
   onExport,
 }) => {
+  const [showExportDropdown, setShowExportDropdown] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowExportDropdown(false)
+      }
+    }
+
+    if (showExportDropdown) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showExportDropdown])
+
   return (
     <div className="w-full mt-2">
       {/* 🔍 Search + Buttons */}
@@ -60,13 +80,40 @@ export const FilterToolbar: React.FC<FilterToolbarProps> = ({
               <span>New Order</span>
             </button>
           )}
-          <button
-            onClick={onExport}
-            className="flex items-center space-x-1 px-3 py-1 border text-sm border-border rounded-md hover:bg-accent"
-          >
-            <ArrowDownTrayIcon className="h-4 w-4 text-muted-foreground" />
-            <span>Export</span>
-          </button>
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setShowExportDropdown(!showExportDropdown)}
+              className="flex items-center space-x-1 px-3 py-1 border text-sm border-border rounded-md hover:bg-accent"
+            >
+              <ArrowDownTrayIcon className="h-4 w-4 text-muted-foreground" />
+              <span>Export</span>
+              <ChevronDownIcon className="h-3 w-3 text-muted-foreground ml-1" />
+            </button>
+            {showExportDropdown && (
+              <div className="absolute right-0 mt-1 w-40 bg-background border border-border rounded-md shadow-lg z-50">
+                <button
+                  onClick={() => {
+                    onExport?.('pdf')
+                    setShowExportDropdown(false)
+                  }}
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-accent rounded-t-md flex items-center gap-2"
+                >
+                  <span>📄</span>
+                  <span>Export PDF</span>
+                </button>
+                <button
+                  onClick={() => {
+                    onExport?.('csv')
+                    setShowExportDropdown(false)
+                  }}
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-accent rounded-b-md flex items-center gap-2"
+                >
+                  <span>📊</span>
+                  <span>Export CSV</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

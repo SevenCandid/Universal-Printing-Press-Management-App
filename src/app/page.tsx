@@ -8,9 +8,10 @@ export default function HomePage() {
 
   useEffect(() => {
     const checkUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
+      // Use getUser() for secure authentication check
+      const { data: { user }, error } = await supabase.auth.getUser()
 
-      if (!session) {
+      if (error || !user) {
         router.replace('/login')
         return
       }
@@ -18,7 +19,7 @@ export default function HomePage() {
       const { data: profile } = await supabase
         .from('profiles')
         .select('role')
-        .eq('id', session.user.id)
+        .eq('id', user.id)
         .single()
 
       switch (profile?.role) {

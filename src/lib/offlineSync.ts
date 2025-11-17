@@ -120,10 +120,16 @@ export async function fetchAllCriticalData(): Promise<void> {
         const { data, error } = await query;
         
         if (error) {
-          // Only log if it's not a "table doesn't exist" error
-          if (!error.message.includes('does not exist') && error.code !== 'PGRST204') {
-            console.warn(`[OfflineSync] Could not fetch ${table}:`, error.message);
+          // Silently skip if it's a "table doesn't exist" error or 404
+          if (error.message.includes('does not exist') || 
+              error.message.includes('schema cache') ||
+              error.code === 'PGRST204' ||
+              error.code === '42P01') {
+            // Table doesn't exist - skip silently
+            return;
           }
+          // Only log other errors
+          console.warn(`[OfflineSync] Could not fetch ${table}:`, error.message);
           return;
         }
         
@@ -141,7 +147,7 @@ export async function fetchAllCriticalData(): Promise<void> {
     await safeFetch('orders', STORAGE_KEYS.ORDERS, { limit: 100, orderBy: 'created_at' });
     await safeFetch('expenses', STORAGE_KEYS.EXPENSES, { limit: 100, orderBy: 'created_at' });
     await safeFetch('profiles', STORAGE_KEYS.PROFILES);
-    await safeFetch('products', STORAGE_KEYS.PRODUCTS);
+    // await safeFetch('products', STORAGE_KEYS.PRODUCTS); // Commented out - table doesn't exist
     // await safeFetch('invoices', STORAGE_KEYS.INVOICES, { limit: 50, orderBy: 'created_at' }); // Commented out - table doesn't exist
 
     await updateLastSyncTime();

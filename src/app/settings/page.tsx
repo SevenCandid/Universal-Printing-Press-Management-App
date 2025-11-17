@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import toast from 'react-hot-toast'
+import { ArrowLeftIcon } from '@heroicons/react/24/outline'
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -76,6 +77,15 @@ export default function SettingsPage() {
 
   return (
     <div className="container max-w-lg mx-auto py-10">
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => router.back()}
+        className="mb-4"
+      >
+        <ArrowLeftIcon className="h-4 w-4 mr-2" />
+        Back
+      </Button>
       <Card className="shadow-md">
         <CardHeader>
           <CardTitle>Settings</CardTitle>

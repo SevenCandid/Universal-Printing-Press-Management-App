@@ -33,7 +33,7 @@ export const metadata = {
 }
 
 export const viewport = {
-  themeColor: '#1A237E',
+  themeColor: '#ffffff',
   display: 'standalone',
   background_color: '#ffffff',
 }
@@ -60,10 +60,17 @@ export default async function RootLayout({
     }
   )
 
-  // ✅ Correctly fetch the session from Supabase
+  // ✅ Fetch user securely (server-side)
+  // Use getUser() to verify authentication with Supabase Auth server (avoids security warning)
+  // We don't use getSession() here to avoid the security warning
+  // The client-side SupabaseProvider will handle session management securely
   const {
-    data: { session },
-  } = await supabase.auth.getSession()
+    data: { user },
+  } = await supabase.auth.getUser()
+  
+  // Pass null for session - client-side will handle it securely via onAuthStateChange
+  // This avoids the security warning while maintaining functionality
+  const session = null
 
   return (
     <html lang="en" suppressHydrationWarning>
@@ -76,7 +83,7 @@ export default async function RootLayout({
       </head>
 
       <body className="min-h-screen bg-background text-foreground antialiased overflow-x-hidden">
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           <SupabaseProvider session={session}>
             <OfflineProvider>
               {/* 🔔 Notification System START */}

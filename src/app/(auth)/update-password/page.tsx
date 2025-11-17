@@ -16,11 +16,11 @@ export default function UpdatePasswordPage() {
   const [checkingSession, setCheckingSession] = useState(true)
 
   useEffect(() => {
-    // Check if user came from password reset email
+    // Check if user came from password reset email (using secure method)
     const checkResetSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
+      const { data: { user }, error } = await supabase.auth.getUser()
       
-      if (session) {
+      if (user && !error) {
         setValidSession(true)
       } else {
         toast.error('Invalid or expired reset link. Please request a new one.')

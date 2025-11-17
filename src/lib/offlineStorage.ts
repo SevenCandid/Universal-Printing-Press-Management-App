@@ -15,6 +15,7 @@ export const STORAGE_KEYS = {
   EXPENSES: 'offline_expenses',
   PROFILES: 'offline_profiles',
   PRODUCTS: 'offline_products',
+  RENTAL_INVENTORY: 'offline_rental_inventory',
   INVOICES: 'offline_invoices',
   HANDBOOK: 'offline_handbook',
   USER_PROFILE: 'offline_user_profile',

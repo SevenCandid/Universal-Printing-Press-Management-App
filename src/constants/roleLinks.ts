@@ -5,6 +5,8 @@ import {
   UsersIcon,
   ChartBarIcon,
   DocumentChartBarIcon,
+  EnvelopeIcon,
+  ArchiveBoxIcon,
 } from '@heroicons/react/24/outline'
 
 export const roleNav: Record<
@@ -14,6 +16,7 @@ export const roleNav: Record<
   ceo: [
     { name: 'Dashboard', href: '/ceo/dashboard', icon: HomeIcon },
     { name: 'Orders', href: '/ceo/orders', icon: DocumentTextIcon },
+    { name: 'Client Connect', href: '/ceo/clientconnect', icon: EnvelopeIcon },
     { name: 'Tasks', href: '/ceo/tasks', icon: ClipboardDocumentListIcon },
     { name: 'Sales Reports', href: '/ceo/sales-reports', icon: DocumentChartBarIcon },
     { name: 'Users', href: '/ceo/staff', icon: UsersIcon },
@@ -22,20 +25,27 @@ export const roleNav: Record<
   manager: [
     { name: 'Dashboard', href: '/manager/dashboard', icon: HomeIcon },
     { name: 'Orders', href: '/manager/orders', icon: DocumentTextIcon },
+    { name: 'Client Connect', href: '/manager/clientconnect', icon: EnvelopeIcon },
     { name: 'Tasks', href: '/manager/tasks', icon: ClipboardDocumentListIcon },
+    { name: 'Sales Reports', href: '/manager/sales-reports', icon: DocumentChartBarIcon },
+    { name: 'Rentals', href: '/manager/rentals', icon: ArchiveBoxIcon },
     { name: 'Users', href: '/manager/staff', icon: UsersIcon },
     { name: 'Reports', href: '/manager/reports', icon: ChartBarIcon },
   ],
   executive_assistant: [
     { name: 'Dashboard', href: '/executive_assistant/dashboard', icon: HomeIcon },
     { name: 'Orders', href: '/executive_assistant/orders', icon: DocumentTextIcon },
+    { name: 'Client Connect', href: '/executive_assistant/clientconnect', icon: EnvelopeIcon },
     { name: 'Tasks', href: '/executive_assistant/tasks', icon: ClipboardDocumentListIcon },
+    { name: 'Sales Reports', href: '/executive_assistant/sales-reports', icon: DocumentChartBarIcon },
+    { name: 'Rentals', href: '/executive_assistant/rentals', icon: ArchiveBoxIcon },
     { name: 'Users', href: '/executive_assistant/staff', icon: UsersIcon },
     { name: 'Reports', href: '/executive_assistant/reports', icon: ChartBarIcon },
   ],
   staff: [
     { name: 'Dashboard', href: '/staff/dashboard', icon: HomeIcon },
     { name: 'Orders', href: '/staff/orders', icon: DocumentTextIcon },
+    { name: 'Client Connect', href: '/staff/clientconnect', icon: EnvelopeIcon },
     { name: 'Tasks', href: '/staff/tasks', icon: ClipboardDocumentListIcon },
     { name: 'Users', href: '/staff/staff', icon: UsersIcon },
     { name: 'Reports', href: '/staff/reports', icon: ChartBarIcon },
@@ -43,13 +53,17 @@ export const roleNav: Record<
   intern: [
     { name: 'Dashboard', href: '/intern/dashboard', icon: HomeIcon },
     { name: 'Orders', href: '/intern/orders', icon: DocumentTextIcon },
+    { name: 'Client Connect', href: '/intern/clientconnect', icon: EnvelopeIcon },
     { name: 'Tasks', href: '/intern/tasks', icon: ClipboardDocumentListIcon },
+    { name: 'Sales Reports', href: '/intern/sales-reports', icon: DocumentChartBarIcon },
+    { name: 'Rentals', href: '/intern/rentals', icon: ArchiveBoxIcon },
     { name: 'Users', href: '/intern/staff', icon: UsersIcon },
     { name: 'Reports', href: '/intern/reports', icon: ChartBarIcon },
   ],
   sales_representative: [
     { name: 'Dashboard', href: '/sales_representative/dashboard', icon: HomeIcon },
     { name: 'Orders', href: '/sales_representative/orders', icon: DocumentTextIcon },
+    { name: 'Client Connect', href: '/sales_representative/clientconnect', icon: EnvelopeIcon },
     { name: 'Tasks', href: '/sales_representative/tasks', icon: ClipboardDocumentListIcon },
     { name: 'Daily Reports', href: '/sales_representative/daily-reports', icon: DocumentChartBarIcon },
     { name: 'Users', href: '/sales_representative/staff', icon: UsersIcon },
@@ -58,6 +72,7 @@ export const roleNav: Record<
   board: [
     { name: 'Dashboard', href: '/board/dashboard', icon: HomeIcon },
     { name: 'Orders', href: '/board/orders', icon: DocumentTextIcon },
+    { name: 'Client Connect', href: '/board/clientconnect', icon: EnvelopeIcon },
     { name: 'Tasks', href: '/board/tasks', icon: ClipboardDocumentListIcon },
     { name: 'Users', href: '/board/staff', icon: UsersIcon },
     { name: 'Reports', href: '/board/reports', icon: ChartBarIcon },

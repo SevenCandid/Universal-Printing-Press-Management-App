@@ -24,6 +24,7 @@ import {
   Receipt, // Expenses icon
   MessagesSquare, // Forum icon
   FileText as ReportIcon, // Sales Reports icon
+  Mail, // Client Connect icon
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -50,6 +51,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     const baseNav = [
       { name: 'Dashboard', href: `/${r}/dashboard`, icon: LayoutDashboard },
       { name: 'Orders', href: `/${r}/orders`, icon: ClipboardList },
+      { name: 'Client Connect', href: `/${r}/clientconnect`, icon: Mail },
       { name: 'Customers', href: `/${r}/customers`, icon: UserCircle },
       { name: 'Files', href: `/${r}/files`, icon: FolderOpen },
       { name: 'Enquiries', href: `/${r}/enquiries`, icon: MessageSquare },
@@ -65,10 +67,13 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
     // Add role-specific pages
     if (r === 'sales_representative') {
-      baseNav.splice(6, 0, { name: 'Daily Reports', href: `/${r}/daily-reports`, icon: ReportIcon })
+      baseNav.splice(7, 0, { name: 'Daily Reports', href: `/${r}/daily-reports`, icon: ReportIcon })
     }
-    if (r === 'ceo') {
-      baseNav.splice(6, 0, { name: 'Sales Reports', href: `/${r}/sales-reports`, icon: ReportIcon })
+    if (r === 'ceo' || r === 'manager' || r === 'executive_assistant' || r === 'intern') {
+      baseNav.splice(8, 0, { name: 'Sales Reports', href: `/${r}/sales-reports`, icon: ReportIcon })
+    }
+    if (r === 'ceo' || r === 'manager' || r === 'executive_assistant' || r === 'intern') {
+      baseNav.splice(9, 0, { name: 'Rentals', href: `/${r}/rentals`, icon: Archive })
     }
 
     return baseNav
@@ -77,34 +82,58 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   // ✅ Merge roleNav overrides (preserve structure)
   const navigation =
     role && roleNav[role]
-      ? defaultNav(role).map((defaultItem) => {
-          const customItem = roleNav[role].find((i) => i.name === defaultItem.name)
-          return customItem || defaultItem
-        })
+      ? (() => {
+          const defaultItems = defaultNav(role)
+          const roleItems = roleNav[role]
+          
+          // Start with roleNav items in their order (authoritative for visible items)
+          const merged: Array<{ name: string; href: string; icon: any }> = []
+          
+          // Add items from roleNav first
+          roleItems.forEach((roleItem) => {
+            merged.push(roleItem)
+          })
+          
+          // Then add any items from defaultNav that aren't in roleNav (for completeness)
+          defaultItems.forEach((defaultItem) => {
+            if (!roleItems.find((i) => i.name === defaultItem.name)) {
+              merged.push(defaultItem)
+            }
+          })
+          
+          return merged
+        })()
       : role
       ? defaultNav(role)
       : []
 
   // Inventory links (always shown as a separate group)
-  const inventoryLinks = role
-  ? [
-      {
-        name: 'Equipment',
-        href: `/${role}/inventory/equipment`,
-        icon: Archive,
-      },
-      {
-        name: 'Materials',
-        href: `/${role}/inventory/materials`,
-        icon: Layers,
-      },
-      {
-        name: 'Vendors',
-        href: `/${role}/inventory/vendors`,
-        icon: Users, // or change to another icon if you prefer
-      },
-    ]
-  : []
+  // Inventory links (always shown as a separate group)
+const inventoryLinks = role
+? [
+    {
+      name: 'Equipment',
+      href: `/${role}/inventory/equipment`,
+      icon: Archive,
+    },
+    {
+      name: 'Materials',
+      href: `/${role}/inventory/materials`,
+      icon: Layers,
+    },
+    {
+      name: 'Vendors',
+      href: `/${role}/inventory/vendors`,
+      icon: Users,
+    },
+    {
+      name: 'Rental Services',
+      href: `/${role}/rental`,
+      icon: Briefcase, // you can change this icon if you prefer (e.g., Package, Warehouse)
+    },
+  ]
+: []
+
 
 
   return (
