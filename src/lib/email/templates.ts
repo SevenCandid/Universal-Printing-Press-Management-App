@@ -3,14 +3,10 @@
  * Supports placeholder replacement for personalization
  */
 
-import type { EmailTemplate } from './types'
+import type { EmailTemplate, TemplateVariables } from './types'
 
-export interface TemplateVariables {
-  clientName: string
-  companyName?: string
-  month?: string
-  year?: string
-}
+// Re-export for backward compatibility
+export type { TemplateVariables }
 
 /**
  * Replace placeholders in template with actual values

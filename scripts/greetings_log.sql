@@ -59,3 +59,4 @@ COMMENT ON COLUMN greetings_log.delivery_status IS 'Status of delivery: success 
 -- ALTER TABLE greetings_log ADD CONSTRAINT greetings_log_message_type_check 
 --   CHECK (message_type IN ('email', 'sms', 'whatsapp'));
 
+

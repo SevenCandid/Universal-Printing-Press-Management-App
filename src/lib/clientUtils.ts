@@ -79,7 +79,7 @@ export async function fetchClientsFromOrders(
 
       // Skip if missing name
       if (!name || name === '') {
-        console.debug('[ClientUtils] Skipping order - missing name:', { order_number: order.order_number || 'N/A' })
+        console.debug('[ClientUtils] Skipping order - missing name:', { customer_name: name, email, phone })
         continue
       }
 
@@ -87,7 +87,7 @@ export async function fetchClientsFromOrders(
       if ((!email || email === '' || !isValidEmail(email)) && 
           (!phone || phone === '' || !isValidPhone(phone))) {
         console.debug('[ClientUtils] Skipping order - missing both valid email and phone:', { 
-          order_number: order.order_number || 'N/A',
+          customer_name: name,
           has_email: !!email,
           email_valid: email ? isValidEmail(email) : false,
           has_phone: !!phone,
@@ -99,7 +99,7 @@ export async function fetchClientsFromOrders(
       // Validate email if provided
       if (email && email !== '' && !isValidEmail(email)) {
         console.debug('[ClientUtils] Skipping order - invalid email format:', { 
-          order_number: order.order_number || 'N/A',
+          customer_name: name,
           email 
         })
         continue
@@ -108,7 +108,7 @@ export async function fetchClientsFromOrders(
       // Validate phone if provided
       if (phone && phone !== '' && !isValidPhone(phone)) {
         console.debug('[ClientUtils] Skipping order - invalid phone format:', { 
-          order_number: order.order_number || 'N/A',
+          customer_name: name,
           phone 
         })
         continue

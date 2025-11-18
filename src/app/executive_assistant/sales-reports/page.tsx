@@ -4,3 +4,4 @@ export default function ExecutiveAssistantSalesReportsPage() {
   return <CEOSalesReportsViewBase />
 }
 
+

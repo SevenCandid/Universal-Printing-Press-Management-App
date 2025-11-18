@@ -29,6 +29,13 @@ export interface EmailTemplate {
   text?: string
 }
 
+export interface TemplateVariables {
+  clientName: string
+  companyName?: string
+  month?: string
+  year?: string
+}
+
 export type EmailProviderType = 'gmail' | 'resend' | 'sendgrid'
 
 

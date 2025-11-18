@@ -6,3 +6,4 @@ export default function ExecutiveAssistantRentalsPage() {
   return <RentalsBase role="executive_assistant" />
 }
 
+

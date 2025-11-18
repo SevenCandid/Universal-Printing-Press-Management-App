@@ -54,3 +54,4 @@ COMMENT ON TABLE manual_clients IS 'Stores manually added client contacts for gr
 COMMENT ON COLUMN manual_clients.email IS 'Client email address (must be unique)';
 COMMENT ON COLUMN manual_clients.phone IS 'Client phone number';
 
+

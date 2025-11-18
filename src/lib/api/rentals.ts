@@ -27,11 +27,8 @@ const numericField = z.preprocess(
     return value
   },
   z
-    .number({
-      required_error: 'Value is required',
-      invalid_type_error: 'Value must be a number',
-    })
-    .int()
+    .number()
+    .int('Value must be a number')
     .min(0, 'Value must be zero or greater')
 )
 
@@ -245,13 +242,18 @@ export const createRentalItem = async (
 ): ApiResult<RentalInventoryRow> => {
   const parsed = rentalItemCreateSchema.safeParse(payload)
   if (!parsed.success) {
-    const message = parsed.error.errors.map(issue => issue.message).join(', ')
+    const message = parsed.error.issues.map(issue => issue.message).join(', ')
     return { data: null, error: message }
   }
 
   const sanitizedCategory = sanitizeCategory(parsed.data.category)
   const sanitizedItemName = sanitizeText(parsed.data.item_name)
-  const counts = normalizeCounts(parsed.data)
+  const counts = normalizeCounts({
+    total: parsed.data.total ?? 0,
+    working: parsed.data.working ?? 0,
+    faulty: parsed.data.faulty ?? 0,
+    inactive: parsed.data.inactive ?? 0,
+  })
 
   const record: RentalInventoryRow = {
     id: generateId(),
@@ -301,7 +303,7 @@ export const updateRentalItem = async (
 
   const parsed = rentalItemUpdateSchema.safeParse(updates)
   if (!parsed.success) {
-    const message = parsed.error.errors.map(issue => issue.message).join(', ')
+    const message = parsed.error.issues.map(issue => issue.message).join(', ')
     return { data: null, error: message }
   }
 

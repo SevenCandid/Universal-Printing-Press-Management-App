@@ -6,3 +6,4 @@ export default function ManagerRentalsPage() {
   return <RentalsBase role="manager" />
 }
 
+

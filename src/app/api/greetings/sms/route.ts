@@ -35,7 +35,7 @@ const BATCH_SIZE = 10
 async function processSMSBatch(
   batch: Array<{ phone: string; name: string }>,
   customMessage?: string
-): Promise<Array<{ phone: string; name: string; result: { success: boolean; error?: string }; messageContent?: string }>> {
+): Promise<Array<{ phone: string; name: string; result: { success: boolean; error?: string }; messageContent: string }>> {
   const results = []
   
   for (const contact of batch) {
@@ -159,7 +159,7 @@ export async function POST(request: NextRequest) {
 
     // Process contacts in batches
     const batches = createBatches(validContacts, BATCH_SIZE)
-    const allResults: Array<{ phone: string; name: string; result: { success: boolean; error?: string } }> = []
+    const allResults: Array<{ phone: string; name: string; result: { success: boolean; error?: string }; messageContent: string }> = []
 
     console.log(`[Greetings API] Processing ${validContacts.length} contacts in ${batches.length} batches of ${BATCH_SIZE}`)
 

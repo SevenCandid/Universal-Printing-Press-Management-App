@@ -6,3 +6,4 @@ export default function InternRentalsPage() {
   return <RentalsBase role="intern" />
 }
 
+
