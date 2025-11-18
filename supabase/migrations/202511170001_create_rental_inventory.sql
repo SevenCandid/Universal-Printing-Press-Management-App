@@ -102,3 +102,4 @@ grant select, insert, update, delete on public.rental_inventory to authenticated
 
 
 
+

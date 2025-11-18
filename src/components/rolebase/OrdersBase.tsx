@@ -13,6 +13,7 @@ import {
   EyeIcon,
   ChevronDownIcon,
   ChevronUpIcon,
+  DocumentTextIcon,
 } from '@heroicons/react/24/outline'
 import toast from 'react-hot-toast'
 import { useSupabase } from '@/components/providers/SupabaseProvider'
@@ -44,6 +45,8 @@ type Order = {
   creator_email?: string
   creator_role?: string
   created_at?: string
+  due_date?: string
+  notes?: string
 }
 
 type OrderFile = {
@@ -1112,6 +1115,7 @@ export default function OrdersPage() {
                   <th className="px-4 py-3 whitespace-nowrap" style={{ minWidth: '150px' }}>Payment Method</th>
                   <th className="px-4 py-3 whitespace-nowrap" style={{ minWidth: '140px' }}>Payment</th>
                   <th className="px-4 py-3 whitespace-nowrap" style={{ minWidth: '120px' }}>Status</th>
+                  <th className="px-4 py-3 whitespace-nowrap" style={{ minWidth: '120px' }}>Due Date</th>
                   <th className="px-4 py-3 whitespace-nowrap" style={{ minWidth: '120px' }}>Created By</th>
                   <th className="px-4 py-3 whitespace-nowrap" style={{ minWidth: '120px' }}>Date</th>
                   <th className="px-4 py-3 whitespace-nowrap" style={{ minWidth: '180px' }}>Actions</th>
@@ -1167,6 +1171,7 @@ export default function OrdersPage() {
                 { label: 'Payment Method', minWidth: '150px' },
                 { label: 'Payment', minWidth: '140px' },
                 { label: 'Status', minWidth: '120px' },
+                { label: 'Due Date', minWidth: '120px' },
                 { label: 'Created By', minWidth: '120px' },
                 { label: 'Date', minWidth: '120px' },
                 { label: 'Actions', minWidth: '180px' },
@@ -1177,9 +1182,9 @@ export default function OrdersPage() {
           </thead>
           <tbody className="divide-y divide-border">
             {loading ? (
-              <tr><td colSpan={15} className="text-center py-8 text-muted-foreground">Loading...</td></tr>
+              <tr><td colSpan={16} className="text-center py-8 text-muted-foreground">Loading...</td></tr>
             ) : orders.length === 0 ? (
-              <tr><td colSpan={15} className="text-center py-8 text-muted-foreground">No orders found</td></tr>
+              <tr><td colSpan={16} className="text-center py-8 text-muted-foreground">No orders found</td></tr>
             ) : (
               orders.map((o) => (
                 <Fragment key={o.id}>
@@ -1188,12 +1193,16 @@ export default function OrdersPage() {
                     <td className="px-2 py-3">
                       <button
                         onClick={() => toggleOrderExpansion(o.id)}
-                        className="text-muted-foreground hover:text-foreground"
+                        className="text-muted-foreground hover:text-foreground relative"
+                        title={o.notes ? "View files and notes" : "View files"}
                       >
                         {expandedOrderId === o.id ? (
                           <ChevronUpIcon className="h-5 w-5" />
                         ) : (
                           <ChevronDownIcon className="h-5 w-5" />
+                        )}
+                        {o.notes && (
+                          <span className="absolute -top-1 -right-1 h-2 w-2 bg-blue-500 rounded-full" title="Has notes" />
                         )}
                       </button>
                     </td>
@@ -1298,6 +1307,17 @@ export default function OrdersPage() {
                       )}
                     </td>
 
+                    {/* Due Date */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {o.due_date ? (
+                        <span className="text-sm">
+                          {new Date(o.due_date).toLocaleDateString()}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </td>
+
                     {/* Created By - Show creator first name or email */}
                     <td className="px-4 py-3 whitespace-nowrap">
                       {o.creator_name ? (
@@ -1367,8 +1387,21 @@ export default function OrdersPage() {
                   {/* 🔔 File Storage Expansion Row START */}
                   {expandedOrderId === o.id && (
                     <tr className="bg-muted/20">
-                      <td colSpan={13} className="px-8 py-6">
-                        <div className="space-y-4">
+                      <td colSpan={15} className="px-8 py-6">
+                        <div className="space-y-6">
+                          {/* Notes Section */}
+                          {o.notes && (
+                            <div className="space-y-2">
+                              <h3 className="text-lg font-semibold flex items-center gap-2">
+                                <DocumentTextIcon className="h-5 w-5" />
+                                Additional Notes
+                              </h3>
+                              <div className="p-4 border rounded-lg bg-background">
+                                <p className="text-sm whitespace-pre-wrap">{o.notes}</p>
+                              </div>
+                            </div>
+                          )}
+
                           <div className="flex items-center justify-between">
                             <h3 className="text-lg font-semibold flex items-center gap-2">
                               <PaperClipIcon className="h-5 w-5" />

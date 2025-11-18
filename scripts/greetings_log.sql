@@ -60,3 +60,4 @@ COMMENT ON COLUMN greetings_log.delivery_status IS 'Status of delivery: success 
 --   CHECK (message_type IN ('email', 'sms', 'whatsapp'));
 
 
+

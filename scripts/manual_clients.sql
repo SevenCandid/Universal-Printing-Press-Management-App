@@ -55,3 +55,4 @@ COMMENT ON COLUMN manual_clients.email IS 'Client email address (must be unique)
 COMMENT ON COLUMN manual_clients.phone IS 'Client phone number';
 
 
+
