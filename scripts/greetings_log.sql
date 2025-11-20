@@ -61,3 +61,5 @@ COMMENT ON COLUMN greetings_log.delivery_status IS 'Status of delivery: success 
 
 
 
+
+
