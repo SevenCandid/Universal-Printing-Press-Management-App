@@ -72,9 +72,6 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     if (r === 'ceo' || r === 'manager' || r === 'executive_assistant' || r === 'intern') {
       baseNav.splice(8, 0, { name: 'Sales Reports', href: `/${r}/sales-reports`, icon: ReportIcon })
     }
-    if (r === 'ceo' || r === 'manager' || r === 'executive_assistant' || r === 'intern') {
-      baseNav.splice(9, 0, { name: 'Rentals', href: `/${r}/rentals`, icon: Archive })
-    }
 
     return baseNav
   }
@@ -128,7 +125,7 @@ const inventoryLinks = role
     },
     {
       name: 'Rental Services',
-      href: `/${role}/rental`,
+      href: `/${role}/rentals`,
       icon: Briefcase, // you can change this icon if you prefer (e.g., Package, Warehouse)
     },
   ]

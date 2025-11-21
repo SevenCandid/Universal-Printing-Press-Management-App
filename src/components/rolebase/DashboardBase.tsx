@@ -149,11 +149,13 @@ export default function DashboardBase({ role }: { role: string }) {
       // Always calculate from orders to ensure period filtering works
       try {
         if (period === 'all') {
-          // For 'all', sum all orders
-          console.log('🔍 Fetching ALL orders for "all periods"')
+          // For 'all', sum all orders from tracking start date
+          const { TRACKING_START_DATE } = await import('@/lib/constants')
+          console.log('🔍 Fetching ALL orders for "all periods" (from tracking start)')
           const { data: allOrders, error: ordersError } = await supabase
             .from('orders')
             .select('total_amount, payment_status')
+            .gte('created_at', TRACKING_START_DATE.toISOString())
           
           if (ordersError) {
             console.error('❌ Error fetching all orders:', ordersError)
@@ -190,10 +192,16 @@ export default function DashboardBase({ role }: { role: string }) {
             endDate: dateRange.endDate.toISOString()
           })
           
+          // Ensure we don't go before tracking start date
+          const { TRACKING_START_DATE } = await import('@/lib/constants')
+          const actualStartDate = dateRange.startDate < TRACKING_START_DATE 
+            ? TRACKING_START_DATE 
+            : dateRange.startDate
+          
           const { data: periodOrders, error: ordersError } = await supabase
             .from('orders')
             .select('total_amount, payment_status, created_at')
-            .gte('created_at', dateRange.startDate.toISOString())
+            .gte('created_at', actualStartDate.toISOString())
             .lte('created_at', dateRange.endDate.toISOString())
           
           if (ordersError) {

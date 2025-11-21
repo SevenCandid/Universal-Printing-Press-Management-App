@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { TRACKING_START_DATE } from '@/lib/constants'
 
 export function useRealtimeDashboard() {
   const [stats, setStats] = useState({
@@ -16,6 +17,7 @@ export function useRealtimeDashboard() {
     const { count: ordersCount } = await supabase
       .from('orders')
       .select('*', { count: 'exact', head: true })
+      .gte('created_at', TRACKING_START_DATE.toISOString())
 
     const { count: tasksCount } = await supabase
       .from('tasks')
@@ -25,6 +27,7 @@ export function useRealtimeDashboard() {
       .from('orders')
       .select('total_amount')
       .not('payment_status', 'eq', 'cancelled')
+      .gte('created_at', TRACKING_START_DATE.toISOString())
 
     const { count: activeStaffCount } = await supabase
       .from('staff')

@@ -1,17 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { createClient } from '@supabase/supabase-js'
-import { PlusCircle, Trash2, Pencil, History, Download } from 'lucide-react'
+import { useEffect, useState, useCallback } from 'react'
+import { useSupabase } from '@/components/providers/SupabaseProvider'
+import { PlusCircle, Trash2, Pencil, History, Download, ShoppingCart } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import * as XLSX from 'xlsx'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
 
 type Material = {
   id: string
@@ -45,6 +40,23 @@ type Purchase = {
   notes?: string | null
 }
 
+type MaterialToBuy = {
+  id?: string
+  material_name: string
+  category: string
+  quantity_needed: number
+  unit: string
+  vendor_id?: string | null
+  priority: 'low' | 'medium' | 'high' | 'urgent'
+  notes?: string | null
+  status: 'pending' | 'approved' | 'rejected' | 'purchased'
+  estimated_cost?: number | null
+  created_by?: string | null
+  updated_by?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
 const categories = [
   { key: 'paper', name: 'Papers' },
   { key: 'ink', name: 'Inks & Toners' },
@@ -58,10 +70,33 @@ const categories = [
 ]
 
 export default function MaterialsInventory() {
+  const { supabase } = useSupabase()
+
   // Data
   const [materials, setMaterials] = useState<Material[]>([])
   const [vendors, setVendors] = useState<Vendor[]>([])
   const [loading, setLoading] = useState(true)
+
+  // User role
+  const [userId, setUserId] = useState<string | null>(null)
+  const [userRole, setUserRole] = useState<string | null>(null)
+
+  // Materials to buy
+  const [materialsToBuy, setMaterialsToBuy] = useState<MaterialToBuy[]>([])
+  const [loadingMaterialsToBuy, setLoadingMaterialsToBuy] = useState(false)
+  const [showMaterialToBuyModal, setShowMaterialToBuyModal] = useState(false)
+  const [editingMaterialToBuy, setEditingMaterialToBuy] = useState<MaterialToBuy | null>(null)
+  const [materialToBuyForm, setMaterialToBuyForm] = useState<Partial<MaterialToBuy>>({
+    material_name: '',
+    category: '',
+    quantity_needed: 0,
+    unit: '',
+    vendor_id: null,
+    priority: 'medium',
+    notes: '',
+    status: 'pending',
+    estimated_cost: null,
+  })
 
   // UI state
   const [showMaterialModal, setShowMaterialModal] = useState(false)
@@ -83,10 +118,29 @@ export default function MaterialsInventory() {
   const [purchaseForm, setPurchaseForm] = useState<Partial<Purchase>>({})
   const [purchaseHistory, setPurchaseHistory] = useState<Purchase[]>([])
 
+  // Load current user ID and role
   useEffect(() => {
-    fetchData()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    if (!supabase?.auth) return
+    ;(async () => {
+      const { data } = await supabase.auth.getUser()
+      if (data?.user?.id) {
+        setUserId(data.user.id)
+        // Fetch user role
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', data.user.id)
+          .single()
+        if (profile?.role) {
+          const role = profile.role.toLowerCase()
+          setUserRole(role)
+          console.log('[InventoryMaterials] User role detected:', role)
+        } else {
+          console.log('[InventoryMaterials] No role found in profile')
+        }
+      }
+    })()
+  }, [supabase])
 
   // fetch materials & vendors (and purchases when needed)
   async function fetchData() {
@@ -108,6 +162,167 @@ export default function MaterialsInventory() {
       alert('Error fetching data. Check console.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Fetch materials to buy
+  const fetchMaterialsToBuy = useCallback(async () => {
+    if (userRole !== 'ceo' && userRole !== 'executive_assistant') {
+      console.log('[InventoryMaterials] fetchMaterialsToBuy: Skipping - role is', userRole)
+      return
+    }
+    console.log('[InventoryMaterials] fetchMaterialsToBuy: Fetching materials to buy for role', userRole)
+    setLoadingMaterialsToBuy(true)
+    try {
+      const { data, error } = await supabase
+        .from('materials_to_buy')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        // If table doesn't exist, silently fail and show empty state
+        if (error.code === '42P01' || error.message.includes('does not exist')) {
+          console.warn('[InventoryMaterials] materials_to_buy table does not exist. Please run CREATE_MATERIALS_TO_BUY_TABLE.sql')
+          setMaterialsToBuy([])
+        } else {
+          console.error('[InventoryMaterials] Error fetching materials to buy:', error)
+          throw error
+        }
+      } else {
+        console.log('[InventoryMaterials] Fetched', data?.length || 0, 'materials to buy')
+        setMaterialsToBuy(data || [])
+      }
+    } catch (err: any) {
+      console.error('[InventoryMaterials] Error fetching materials to buy:', err)
+      // Don't show alert - just log to console and show empty state
+      setMaterialsToBuy([])
+    } finally {
+      setLoadingMaterialsToBuy(false)
+    }
+  }, [userRole, supabase])
+
+  useEffect(() => {
+    fetchData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Fetch materials to buy when user role is available
+  useEffect(() => {
+    console.log('[InventoryMaterials] useEffect - userRole:', userRole)
+    if (userRole === 'ceo' || userRole === 'executive_assistant') {
+      console.log('[InventoryMaterials] Calling fetchMaterialsToBuy')
+      fetchMaterialsToBuy()
+    } else {
+      console.log('[InventoryMaterials] Not fetching - userRole is not CEO or Executive Assistant')
+    }
+  }, [userRole, fetchMaterialsToBuy])
+
+  // Real-time subscription for materials to buy
+  useEffect(() => {
+    if (userRole !== 'ceo' && userRole !== 'executive_assistant') return
+
+    const channel = supabase
+      .channel('materials-to-buy-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'materials_to_buy',
+        },
+        () => {
+          // Refetch materials to buy when changes occur
+          fetchMaterialsToBuy()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [userRole, fetchMaterialsToBuy])
+
+  // Save material to buy
+  async function saveMaterialToBuy() {
+    if (!userId || userRole !== 'executive_assistant') {
+      alert('Only Executive Assistant can add materials to buy.')
+      return
+    }
+
+    if (!materialToBuyForm.material_name || !materialToBuyForm.category || !materialToBuyForm.quantity_needed || !materialToBuyForm.unit) {
+      alert('Please fill required fields (Material Name, Category, Quantity Needed, Unit).')
+      return
+    }
+
+    const payload: Partial<MaterialToBuy> = {
+      material_name: String(materialToBuyForm.material_name),
+      category: String(materialToBuyForm.category).toLowerCase(),
+      quantity_needed: Number(materialToBuyForm.quantity_needed) || 0,
+      unit: String(materialToBuyForm.unit),
+      vendor_id: materialToBuyForm.vendor_id || null,
+      priority: materialToBuyForm.priority || 'medium',
+      notes: materialToBuyForm.notes || null,
+      status: materialToBuyForm.status || 'pending',
+      estimated_cost: materialToBuyForm.estimated_cost !== undefined && materialToBuyForm.estimated_cost !== null ? Number(materialToBuyForm.estimated_cost) : null,
+      updated_by: userId,
+      ...(editingMaterialToBuy ? {} : { created_by: userId }),
+    }
+
+    try {
+      if (editingMaterialToBuy?.id) {
+        const { error } = await supabase
+          .from('materials_to_buy')
+          .update(payload)
+          .eq('id', editingMaterialToBuy.id)
+        if (error) throw error
+        setMaterialsToBuy((prev) => prev.map((m) => (m.id === editingMaterialToBuy.id ? { ...m, ...payload } as MaterialToBuy : m)))
+      } else {
+        const { data, error } = await supabase
+          .from('materials_to_buy')
+          .insert([payload])
+          .select()
+        if (error) throw error
+        setMaterialsToBuy((prev) => [...(data || []), ...prev])
+      }
+
+      setMaterialToBuyForm({
+        material_name: '',
+        category: '',
+        quantity_needed: 0,
+        unit: '',
+        vendor_id: null,
+        priority: 'medium',
+        notes: '',
+        status: 'pending',
+        estimated_cost: null,
+      })
+      setEditingMaterialToBuy(null)
+      setShowMaterialToBuyModal(false)
+      await fetchMaterialsToBuy()
+    } catch (err) {
+      console.error('Error saving material to buy:', err)
+      alert('Error saving material to buy. Check console.')
+    }
+  }
+
+  // Delete material to buy
+  async function deleteMaterialToBuy(id: string) {
+    if (!userId || userRole !== 'executive_assistant') {
+      alert('Only Executive Assistant can delete materials to buy.')
+      return
+    }
+
+    if (!confirm('Are you sure you want to delete this material request?')) return
+    try {
+      const { error } = await supabase
+        .from('materials_to_buy')
+        .delete()
+        .eq('id', id)
+      if (error) throw error
+      setMaterialsToBuy((prev) => prev.filter((m) => m.id !== id))
+    } catch (err) {
+      console.error('Error deleting material to buy:', err)
+      alert('Error deleting material to buy. Check console.')
     }
   }
 
@@ -432,6 +647,163 @@ export default function MaterialsInventory() {
         </div>
       </div>
 
+      {/* Materials to Buy Section - Visible to CEO and Executive Assistant */}
+      {(userRole === 'ceo' || userRole === 'executive_assistant') && (
+        <section className="border rounded-lg p-4 bg-card space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <ShoppingCart className="h-5 w-5" />
+                Materials to Buy
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {userRole === 'ceo' ? 'View materials that need to be purchased' : 'Enter materials that need to be purchased'}
+              </p>
+            </div>
+            {userRole === 'executive_assistant' && (
+              <button
+                onClick={() => {
+                  setMaterialToBuyForm({
+                    material_name: '',
+                    category: '',
+                    quantity_needed: 0,
+                    unit: '',
+                    vendor_id: null,
+                    priority: 'medium',
+                    notes: '',
+                    status: 'pending',
+                    estimated_cost: null,
+                  })
+                  setEditingMaterialToBuy(null)
+                  setShowMaterialToBuyModal(true)
+                }}
+                className="flex items-center gap-2 bg-primary text-primary-foreground px-3 py-1 rounded-md text-sm"
+              >
+                <PlusCircle className="h-4 w-4" /> Add Material to Buy
+              </button>
+            )}
+          </div>
+
+          {userRole === 'ceo' && (
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded p-3 text-sm text-blue-800 dark:text-blue-200">
+              <strong>CEO View:</strong> You can view all materials that need to be purchased. Only Executive Assistant can add or edit these entries.
+            </div>
+          )}
+
+          {userRole === 'executive_assistant' && (
+            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded p-3 text-sm text-green-800 dark:text-green-200">
+              <strong>Executive Assistant:</strong> You can add, edit, and delete materials that need to be purchased. The CEO can view all entries.
+            </div>
+          )}
+
+          {loadingMaterialsToBuy ? (
+            <div className="py-8 text-center text-sm">Loading materials to buy...</div>
+          ) : materialsToBuy.length === 0 ? (
+            <div className="py-8 text-center text-sm text-muted-foreground space-y-2">
+              <div>No materials to buy yet.</div>
+              {userRole === 'executive_assistant' && (
+                <div>Click "Add Material to Buy" to add one.</div>
+              )}
+            </div>
+          ) : (
+            <div className="overflow-x-auto border rounded">
+              <table className="w-full text-sm">
+                <thead className="bg-muted text-muted-foreground">
+                  <tr>
+                    <th className="p-2">Material Name</th>
+                    <th className="p-2">Category</th>
+                    <th className="p-2">Quantity Needed</th>
+                    <th className="p-2">Unit</th>
+                    <th className="p-2">Vendor</th>
+                    <th className="p-2">Priority</th>
+                    <th className="p-2">Status</th>
+                    <th className="p-2">Est. Cost</th>
+                    <th className="p-2">Notes</th>
+                    {userRole === 'executive_assistant' && (
+                      <th className="p-2 text-center">Actions</th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {materialsToBuy.map((item) => {
+                    const vendorName = vendors.find((v) => v.id === item.vendor_id)?.name || '—'
+                    const priorityColors = {
+                      low: 'text-gray-600 dark:text-gray-400',
+                      medium: 'text-yellow-600 dark:text-yellow-400',
+                      high: 'text-orange-600 dark:text-orange-400',
+                      urgent: 'text-red-600 dark:text-red-400',
+                    }
+                    const statusColors = {
+                      pending: 'text-yellow-600 dark:text-yellow-400',
+                      approved: 'text-green-600 dark:text-green-400',
+                      rejected: 'text-red-600 dark:text-red-400',
+                      purchased: 'text-blue-600 dark:text-blue-400',
+                    }
+                    return (
+                      <tr key={item.id} className="border-b hover:bg-muted/10">
+                        <td className="p-2 font-medium">{item.material_name}</td>
+                        <td className="p-2">{categories.find((c) => c.key === item.category)?.name || item.category}</td>
+                        <td className="p-2">{item.quantity_needed}</td>
+                        <td className="p-2">{item.unit}</td>
+                        <td className="p-2">{vendorName}</td>
+                        <td className={cn('p-2 font-medium capitalize', priorityColors[item.priority] || priorityColors.medium)}>
+                          {item.priority}
+                        </td>
+                        <td className={cn('p-2 font-medium capitalize', statusColors[item.status] || statusColors.pending)}>
+                          {item.status}
+                        </td>
+                        <td className="p-2">
+                          {item.estimated_cost !== null && item.estimated_cost !== undefined
+                            ? `₵${Number(item.estimated_cost).toFixed(2)}`
+                            : '—'}
+                        </td>
+                        <td className="p-2 max-w-xs truncate" title={item.notes || ''}>
+                          {item.notes || '—'}
+                        </td>
+                        {userRole === 'executive_assistant' && (
+                          <td className="p-2 text-center space-x-2">
+                            <button
+                              onClick={() => {
+                                setEditingMaterialToBuy(item)
+                                setMaterialToBuyForm({
+                                  material_name: item.material_name,
+                                  category: item.category,
+                                  quantity_needed: item.quantity_needed,
+                                  unit: item.unit,
+                                  vendor_id: item.vendor_id || null,
+                                  priority: item.priority,
+                                  notes: item.notes || '',
+                                  status: item.status,
+                                  estimated_cost: item.estimated_cost || null,
+                                })
+                                setShowMaterialToBuyModal(true)
+                              }}
+                              title="Edit"
+                              className="text-blue-500 hover:text-blue-700"
+                            >
+                              <Pencil className="h-4 w-4 inline" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (item.id) deleteMaterialToBuy(item.id)
+                              }}
+                              title="Delete"
+                              className="text-red-500 hover:text-red-700"
+                            >
+                              <Trash2 className="h-4 w-4 inline" />
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
       {/* Table area */}
       {loading ? (
         <div className="py-8 text-center text-sm">Loading...</div>
@@ -641,6 +1013,149 @@ export default function MaterialsInventory() {
             <div className="mt-4 flex gap-2 justify-end">
               <button className="px-3 py-1 rounded border" onClick={() => { setShowExportConfirm(false); setExportFormat(null) }}>Cancel</button>
               <button className="px-3 py-1 rounded bg-primary text-primary-foreground" onClick={runExportNow}>Confirm & Download</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add/Edit Material to Buy Modal */}
+      {showMaterialToBuyModal && userRole === 'executive_assistant' && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-3">
+          <div className="bg-card border border-border rounded-lg w-full max-w-xl p-5 space-y-4 overflow-auto max-h-[90vh]">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-semibold">{editingMaterialToBuy ? 'Edit Material to Buy' : 'Add Material to Buy'}</h3>
+              <button
+                onClick={() => {
+                  setShowMaterialToBuyModal(false)
+                  setEditingMaterialToBuy(null)
+                  setMaterialToBuyForm({
+                    material_name: '',
+                    category: '',
+                    quantity_needed: 0,
+                    unit: '',
+                    vendor_id: null,
+                    priority: 'medium',
+                    notes: '',
+                    status: 'pending',
+                    estimated_cost: null,
+                  })
+                }}
+                className="text-muted-foreground"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <input
+                className="px-3 py-2 border rounded"
+                placeholder="Material Name *"
+                value={materialToBuyForm.material_name || ''}
+                onChange={(e) => setMaterialToBuyForm({ ...materialToBuyForm, material_name: e.target.value })}
+              />
+              <select
+                className="px-3 py-2 border rounded"
+                value={materialToBuyForm.category || ''}
+                onChange={(e) => setMaterialToBuyForm({ ...materialToBuyForm, category: e.target.value })}
+              >
+                <option value="">Select Category *</option>
+                {categories.map((c) => (
+                  <option key={c.key} value={c.key}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+
+              <input
+                type="number"
+                className="px-3 py-2 border rounded"
+                placeholder="Quantity Needed *"
+                value={materialToBuyForm.quantity_needed ?? ''}
+                onChange={(e) => setMaterialToBuyForm({ ...materialToBuyForm, quantity_needed: Number(e.target.value) })}
+              />
+              <input
+                className="px-3 py-2 border rounded"
+                placeholder="Unit (e.g. ream, liter) *"
+                value={materialToBuyForm.unit || ''}
+                onChange={(e) => setMaterialToBuyForm({ ...materialToBuyForm, unit: e.target.value })}
+              />
+
+              <select
+                className="px-3 py-2 border rounded"
+                value={materialToBuyForm.vendor_id ?? ''}
+                onChange={(e) => setMaterialToBuyForm({ ...materialToBuyForm, vendor_id: e.target.value || null })}
+              >
+                <option value="">Select Vendor (Optional)</option>
+                {vendors.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                className="px-3 py-2 border rounded"
+                value={materialToBuyForm.priority || 'medium'}
+                onChange={(e) => setMaterialToBuyForm({ ...materialToBuyForm, priority: e.target.value as 'low' | 'medium' | 'high' | 'urgent' })}
+              >
+                <option value="low">Low Priority</option>
+                <option value="medium">Medium Priority</option>
+                <option value="high">High Priority</option>
+                <option value="urgent">Urgent Priority</option>
+              </select>
+
+              <select
+                className="px-3 py-2 border rounded"
+                value={materialToBuyForm.status || 'pending'}
+                onChange={(e) => setMaterialToBuyForm({ ...materialToBuyForm, status: e.target.value as 'pending' | 'approved' | 'rejected' | 'purchased' })}
+              >
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+                <option value="purchased">Purchased</option>
+              </select>
+
+              <input
+                type="number"
+                className="px-3 py-2 border rounded"
+                placeholder="Estimated Cost (Optional)"
+                value={materialToBuyForm.estimated_cost ?? ''}
+                onChange={(e) => setMaterialToBuyForm({ ...materialToBuyForm, estimated_cost: e.target.value === '' ? null : Number(e.target.value) })}
+              />
+
+              <textarea
+                className="col-span-1 sm:col-span-2 px-3 py-2 border rounded"
+                placeholder="Notes (Optional)"
+                value={materialToBuyForm.notes || ''}
+                onChange={(e) => setMaterialToBuyForm({ ...materialToBuyForm, notes: e.target.value })}
+                rows={3}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                className="px-3 py-1 rounded border"
+                onClick={() => {
+                  setShowMaterialToBuyModal(false)
+                  setEditingMaterialToBuy(null)
+                  setMaterialToBuyForm({
+                    material_name: '',
+                    category: '',
+                    quantity_needed: 0,
+                    unit: '',
+                    vendor_id: null,
+                    priority: 'medium',
+                    notes: '',
+                    status: 'pending',
+                    estimated_cost: null,
+                  })
+                }}
+              >
+                Cancel
+              </button>
+              <button className="px-3 py-1 rounded bg-primary text-primary-foreground" onClick={saveMaterialToBuy}>
+                {editingMaterialToBuy ? 'Update' : 'Save'}
+              </button>
             </div>
           </div>
         </div>

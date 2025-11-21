@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabaseClient'
+import { TRACKING_START_DATE } from '@/lib/constants'
 
 export async function GET() {
   try {
-    // Fetch counts
+    // Fetch counts (from tracking start date)
     const { count: ordersCount } = await supabase
       .from('orders')
       .select('*', { count: 'exact', head: true })
+      .gte('created_at', TRACKING_START_DATE.toISOString())
 
     const { count: tasksCount } = await supabase
       .from('tasks')
@@ -16,6 +18,7 @@ export async function GET() {
       .from('orders')
       .select('total_amount')
       .not('status', 'eq', 'cancelled')
+      .gte('created_at', TRACKING_START_DATE.toISOString())
 
     const totalRevenue =
       revenueData?.reduce((acc, row) => acc + (Number(row.total_amount) || 0), 0) ?? 0

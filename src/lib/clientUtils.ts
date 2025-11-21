@@ -42,13 +42,18 @@ export async function fetchClientsFromOrders(
   supabase: SupabaseClient
 ): Promise<ClientInfo[]> {
   try {
+    // Import tracking start date
+    const { TRACKING_START_DATE } = await import('./constants')
+    
     // Fetch orders with customer info, ordered by most recent first
     // We fetch more than 100 to account for duplicates, then deduplicate
     // Allow orders with either email OR phone (or both)
+    // Exclude October orders - only show orders from November 1st, 2024 onwards
     const { data: orders, error } = await supabase
       .from('orders')
       .select('customer_name, customer_email, customer_phone, created_at')
       .or('customer_email.not.is.null,customer_phone.not.is.null') // At least one must exist
+      .gte('created_at', TRACKING_START_DATE.toISOString())
       .order('created_at', { ascending: false })
       .limit(500) // Fetch enough to get 100 unique after deduplication
 

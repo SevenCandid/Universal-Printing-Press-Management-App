@@ -1,17 +1,20 @@
 import { supabase } from '@/lib/supabaseClient'
+import { TRACKING_START_DATE } from '@/lib/constants'
 
 export async function fetchDashboardData() {
   try {
-    // --- Total Orders ---
+    // --- Total Orders (from tracking start date) ---
     const { count: totalOrders } = await supabase
       .from('orders')
       .select('*', { count: 'exact', head: true })
+      .gte('created_at', TRACKING_START_DATE.toISOString())
 
-    // --- Total Revenue ---
+    // --- Total Revenue (from tracking start date) ---
     const { data: paidOrders } = await supabase
       .from('orders')
       .select('total_amount, payment_status')
       .eq('payment_status', 'paid')
+      .gte('created_at', TRACKING_START_DATE.toISOString())
 
     const totalRevenue = paidOrders?.reduce(
       (sum, o) => sum + Number(o.total_amount || 0),

@@ -1,6 +1,7 @@
 'use client'
 
 import { FilterToolbar } from '@/components/ui/FilterToolbar'
+import { TRACKING_START_DATE } from '@/lib/constants'
 
 import { useEffect, useState, useRef, Fragment } from 'react'
 import {
@@ -181,7 +182,11 @@ export default function OrdersPage() {
     const to = from + PAGE_SIZE - 1
 
     // Use the orders_with_creator view to get creator info
-    let query: any = supabase.from('orders_with_creator').select('*', { count: 'exact' })
+    // Exclude October orders - only show orders from November 1st, 2024 onwards
+    let query: any = supabase
+      .from('orders_with_creator')
+      .select('*', { count: 'exact' })
+      .gte('created_at', TRACKING_START_DATE.toISOString())
 
     if (search.trim()) {
       const escaped = search.replace(/'/g, "''")
@@ -195,28 +200,53 @@ export default function OrdersPage() {
 
     if (paymentFilter !== 'all') query = query.eq('payment_status', paymentFilter)
 
-    // Filter by period
+    // Filter by period - Calculate proper start and end dates for each period
     const now = new Date()
-    const startDate = {
-      daily: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0),
-      weekly: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
-      monthly: new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0), // THIS month, not last month
-      yearly: new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0), // THIS year, not last year
-    }[period]
+    let periodStartDate: Date | null = null
+    let periodEndDate: Date | null = null
 
-    // For monthly and yearly, also set end date to current date/time
-    if (period === 'monthly') {
-      const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999) // Last day of current month
-      if (startDate) {
-        query = query.gte('created_at', startDate.toISOString()).lte('created_at', endDate.toISOString())
+    switch (period) {
+      case 'daily': {
+        // Today only - start of today to end of today
+        periodStartDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+        periodEndDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
+        break
       }
-    } else if (period === 'yearly') {
-      const endDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999) // Last day of current year
-      if (startDate) {
-        query = query.gte('created_at', startDate.toISOString()).lte('created_at', endDate.toISOString())
+      case 'weekly': {
+        // Current week - Monday to Sunday
+        const dayOfWeek = now.getDay() // 0 = Sunday, 1 = Monday, etc.
+        const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1 // Convert Sunday (0) to 6 days back
+        const monday = new Date(now)
+        monday.setDate(now.getDate() - daysToMonday)
+        monday.setHours(0, 0, 0, 0)
+        
+        const sunday = new Date(monday)
+        sunday.setDate(monday.getDate() + 6)
+        sunday.setHours(23, 59, 59, 999)
+        
+        periodStartDate = monday
+        periodEndDate = sunday
+        break
       }
-    } else if (startDate) {
-      query = query.gte('created_at', startDate.toISOString())
+      case 'monthly': {
+        // Current month - first day to last day
+        periodStartDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
+        periodEndDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999) // Last day of current month
+        break
+      }
+      case 'yearly': {
+        // Current year - January 1 to December 31
+        periodStartDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0) // January 1st
+        periodEndDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999) // December 31st
+        break
+      }
+    }
+
+    // Apply period date filters
+    if (periodStartDate && periodEndDate) {
+      query = query.gte('created_at', periodStartDate.toISOString()).lte('created_at', periodEndDate.toISOString())
+    } else if (periodStartDate) {
+      query = query.gte('created_at', periodStartDate.toISOString())
     }
 
     // Date range override (if provided)
@@ -272,9 +302,89 @@ export default function OrdersPage() {
       
       setOrders(items)
 
-      const totalRevenue = items.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0)
-      const pendingPayments = items.filter((o) => (o.payment_status || '').toLowerCase().includes('pending')).length
-      setSummary({ totalOrders: count || items.length, totalRevenue, pendingPayments })
+      // Calculate summary from ALL filtered orders (not just current page)
+      // Build a separate query to get totals for the current period/filters (without pagination)
+      let summaryQuery: any = supabase
+        .from('orders_with_creator')
+        .select('total_amount, payment_status', { count: 'exact' })
+        .gte('created_at', TRACKING_START_DATE.toISOString())
+
+      // Apply same filters as main query
+      if (search.trim()) {
+        const escaped = search.replace(/'/g, "''")
+        summaryQuery = summaryQuery.or(
+          `order_number.ilike.%${escaped}%,customer_name.ilike.%${escaped}%,customer_phone.ilike.%${escaped}%`
+        )
+      }
+
+      if (statusFilter !== 'all') summaryQuery = summaryQuery.eq('order_status', statusFilter)
+      if (paymentFilter !== 'all') summaryQuery = summaryQuery.eq('payment_status', paymentFilter)
+
+      // Apply same period filters as buildQuery
+      const nowForSummary = new Date()
+      let periodStartDate: Date | null = null
+      let periodEndDate: Date | null = null
+
+      switch (period) {
+        case 'daily': {
+          periodStartDate = new Date(nowForSummary.getFullYear(), nowForSummary.getMonth(), nowForSummary.getDate(), 0, 0, 0, 0)
+          periodEndDate = new Date(nowForSummary.getFullYear(), nowForSummary.getMonth(), nowForSummary.getDate(), 23, 59, 59, 999)
+          break
+        }
+        case 'weekly': {
+          const dayOfWeek = nowForSummary.getDay()
+          const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
+          const monday = new Date(nowForSummary)
+          monday.setDate(nowForSummary.getDate() - daysToMonday)
+          monday.setHours(0, 0, 0, 0)
+          const sunday = new Date(monday)
+          sunday.setDate(monday.getDate() + 6)
+          sunday.setHours(23, 59, 59, 999)
+          periodStartDate = monday
+          periodEndDate = sunday
+          break
+        }
+        case 'monthly': {
+          periodStartDate = new Date(nowForSummary.getFullYear(), nowForSummary.getMonth(), 1, 0, 0, 0, 0)
+          periodEndDate = new Date(nowForSummary.getFullYear(), nowForSummary.getMonth() + 1, 0, 23, 59, 59, 999)
+          break
+        }
+        case 'yearly': {
+          periodStartDate = new Date(nowForSummary.getFullYear(), 0, 1, 0, 0, 0, 0)
+          periodEndDate = new Date(nowForSummary.getFullYear(), 11, 31, 23, 59, 59, 999)
+          break
+        }
+      }
+
+      if (periodStartDate && periodEndDate) {
+        summaryQuery = summaryQuery.gte('created_at', periodStartDate.toISOString()).lte('created_at', periodEndDate.toISOString())
+      } else if (periodStartDate) {
+        summaryQuery = summaryQuery.gte('created_at', periodStartDate.toISOString())
+      }
+
+      // Date range override
+      if (dateFrom) {
+        const fromDate = new Date(dateFrom)
+        fromDate.setHours(0, 0, 0, 0)
+        summaryQuery = summaryQuery.gte('created_at', fromDate.toISOString())
+      }
+      if (dateTo) {
+        const toDate = new Date(dateTo)
+        toDate.setHours(23, 59, 59, 999)
+        summaryQuery = summaryQuery.lte('created_at', toDate.toISOString())
+      }
+
+      // Fetch all filtered orders for summary calculation (no pagination)
+      const { data: allFilteredOrders, count: totalCount } = await summaryQuery
+      
+      const totalRevenue = (allFilteredOrders || []).reduce((sum: number, o: any) => sum + (Number(o.total_amount || 0)), 0)
+      const pendingPayments = (allFilteredOrders || []).filter((o: any) => (o.payment_status || '').toLowerCase().includes('pending')).length
+      
+      setSummary({ 
+        totalOrders: totalCount || 0, 
+        totalRevenue, 
+        pendingPayments 
+      })
     } catch (err) {
       console.error('Orders fetch error:', err)
       toast.error('Failed to fetch orders')

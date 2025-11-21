@@ -17,13 +17,15 @@ import {
   BarChart,
   Bar,
 } from 'recharts'
-import { RefreshCw, BarChart2, LineChart as LineChartIcon, FileDown } from 'lucide-react'
+import { RefreshCw, BarChart2, LineChart as LineChartIcon, FileDown, Edit2, Save, X } from 'lucide-react'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
 import toast from 'react-hot-toast'
 import autoTable from 'jspdf-autotable'
+import { TRACKING_START_DATE } from '@/lib/constants'
 
 type Period = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'halfyear' | 'yearly'
+type BankDepositPeriod = 'weekly' | 'monthly' | 'custom'
 
 type RevenueRow = {
   summary_period?: string
@@ -59,20 +61,63 @@ type ExportOptions = {
   includeStaffPerformance: boolean
 }
 
+type BankDeposit = {
+  id?: string
+  period_type: BankDepositPeriod
+  period_key: string
+  start_date: string
+  end_date: string
+  momo_amount: number
+  cash_amount: number
+  bank_deposit_amount: number
+  notes?: string
+  calculated_momo?: number
+  calculated_cash?: number
+}
+
+type BankDepositRow = {
+  period_key: string
+  period_label: string
+  start_date: string
+  end_date: string
+  calculated_momo: number
+  calculated_cash: number
+  momo_amount: number
+  cash_amount: number
+  bank_deposit_amount: number
+  notes?: string
+  id?: string
+}
+
 export default function ReportsBase() {
-  const { supabase } = useSupabase()
+  const { supabase, session } = useSupabase()
   const [period, setPeriod] = useState<Period>('monthly')
   const [revenues, setRevenues] = useState<RevenueRow[]>([])
   const [expenses, setExpenses] = useState<ExpenseRow[]>([])
   const [debts, setDebts] = useState<ExpenseRow[]>([])
   const [staffPerformance, setStaffPerformance] = useState<StaffPerfRow[]>([])
   const [userId, setUserId] = useState<string | null>(null)
+  const [userRole, setUserRole] = useState<string | null>(null)
   const [chartType, setChartType] = useState<'line' | 'bar'>('line')
   const [viewMode, setViewMode] = useState<'amount' | 'percent'>('amount')
   const [loading, setLoading] = useState(false)
   const chartRef = useRef<HTMLDivElement | null>(null)
   const tableRef = useRef<HTMLDivElement | null>(null)
   const staffPerfRef = useRef<HTMLDivElement | null>(null)
+  
+  // Bank Deposits State
+  const [bankDepositPeriod, setBankDepositPeriod] = useState<BankDepositPeriod>('weekly')
+  const [bankDeposits, setBankDeposits] = useState<BankDepositRow[]>([])
+  const [editingRow, setEditingRow] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState<{ momo: number; cash: number; bank_deposit: number; notes?: string }>({
+    momo: 0,
+    cash: 0,
+    bank_deposit: 0,
+    notes: ''
+  })
+  const [customStartDate, setCustomStartDate] = useState('')
+  const [customEndDate, setCustomEndDate] = useState('')
+  const [loadingBankDeposits, setLoadingBankDeposits] = useState(false)
   
   // Export options dialog
   const [showExportDialog, setShowExportDialog] = useState(false)
@@ -82,12 +127,23 @@ export default function ReportsBase() {
     includeStaffPerformance: true,
   })
 
-  // Load current user ID
+  // Load current user ID and role
   useEffect(() => {
     if (!supabase?.auth) return
     ;(async () => {
       const { data } = await supabase.auth.getUser()
-      if (data?.user?.id) setUserId(data.user.id)
+      if (data?.user?.id) {
+        setUserId(data.user.id)
+        // Fetch user role
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', data.user.id)
+          .single()
+        if (profile?.role) {
+          setUserRole(profile.role.toLowerCase())
+        }
+      }
     })()
   }, [supabase])
 
@@ -217,11 +273,13 @@ export default function ReportsBase() {
   const fetchDebts = useCallback(async () => {
     if (!supabase) return
     try {
+      const { TRACKING_START_DATE } = await import('@/lib/constants')
       const { data, error } = await supabase
         .from('orders')
         .select('total_amount, created_at, order_status, payment_status')
         .eq('order_status', 'completed')
         .ilike('payment_status', '%pending%')
+        .gte('created_at', TRACKING_START_DATE.toISOString())
         .order('created_at', { ascending: false })
       
       if (error) throw error
@@ -239,12 +297,314 @@ export default function ReportsBase() {
   }, [supabase])
   // 💳 DEBTS INTEGRATION END
 
+  // 💰 BANK DEPOSITS INTEGRATION START
+  // Calculate momo and cash from orders for a period
+  const calculatePaymentsFromOrders = useCallback(async (
+    startDate: Date,
+    endDate: Date
+  ): Promise<{ momo: number; cash: number }> => {
+    if (!supabase) return { momo: 0, cash: 0 }
+    
+    try {
+      const { TRACKING_START_DATE } = await import('@/lib/constants')
+      // Ensure we don't go before tracking start date
+      const actualStartDate = startDate < TRACKING_START_DATE ? TRACKING_START_DATE : startDate
+      
+      const { data, error } = await supabase
+        .from('orders')
+        .select('total_amount, payment_method, payment_status')
+        .gte('created_at', actualStartDate.toISOString())
+        .lte('created_at', endDate.toISOString())
+        .in('payment_status', ['full payment', 'partial payment'])
+      
+      if (error) throw error
+      
+      let momo = 0
+      let cash = 0
+      
+      ;(data || []).forEach((order: any) => {
+        const amount = Number(order.total_amount || 0)
+        const method = (order.payment_method || 'cash').toLowerCase()
+        
+        if (method.includes('momo') || method.includes('mobile')) {
+          momo += amount
+        } else if (method.includes('cash')) {
+          cash += amount
+        }
+      })
+      
+      return { momo, cash }
+    } catch (err) {
+      console.error('calculatePaymentsFromOrders error:', err)
+      return { momo: 0, cash: 0 }
+    }
+  }, [supabase])
+
+  // Generate period keys for bank deposits
+  // Note: Bank deposits tracking starts from the actual tracking start date (October 26, 2025)
+  const generatePeriodKeys = useCallback((periodType: BankDepositPeriod, startDate?: Date, endDate?: Date): Array<{
+    period_key: string
+    period_label: string
+    start_date: Date
+    end_date: Date
+  }> => {
+    const periods: Array<{
+      period_key: string
+      period_label: string
+      start_date: Date
+      end_date: Date
+    }> = []
+    
+    const now = new Date()
+    
+    if (periodType === 'custom' && startDate && endDate) {
+      const key = `${startDate.toISOString().split('T')[0]}_${endDate.toISOString().split('T')[0]}`
+      const label = `${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}`
+      periods.push({
+        period_key: key,
+        period_label: label,
+        start_date: new Date(startDate.setHours(0, 0, 0, 0)),
+        end_date: new Date(endDate.setHours(23, 59, 59, 999))
+      })
+      return periods
+    }
+    
+    // Bank deposits tracking starts from the actual tracking start date (October 26, 2025)
+    const trackingStart = TRACKING_START_DATE
+    
+    if (periodType === 'weekly') {
+      // Start from tracking start date (October 26, 2025)
+      const weekStart = new Date(trackingStart)
+      weekStart.setHours(0, 0, 0, 0)
+      
+      // Find the Monday of the week containing the start date
+      const firstMonday = new Date(weekStart)
+      const dayOfWeek = firstMonday.getDay() // 0 = Sunday, 1 = Monday, etc.
+      const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1 // Convert Sunday (0) to 6 days back
+      firstMonday.setDate(weekStart.getDate() - daysToMonday)
+      
+      // Generate weeks from start date to now
+      let currentWeekStart = new Date(firstMonday)
+      let weekCounter = 1
+      
+      while (currentWeekStart <= now) {
+        const weekEnd = new Date(currentWeekStart)
+        weekEnd.setDate(currentWeekStart.getDate() + 6)
+        weekEnd.setHours(23, 59, 59, 999)
+        
+        // Only add if the week has passed or is current week, and starts from tracking start date
+        if (weekEnd >= trackingStart) {
+          const year = currentWeekStart.getFullYear()
+          const month = currentWeekStart.getMonth()
+          const weekNum = weekCounter
+          const key = `${year}-W${String(weekNum).padStart(2, '0')}`
+          const label = `Week ${weekNum} (${currentWeekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})`
+          
+          periods.push({ 
+            period_key: key, 
+            period_label: label, 
+            start_date: new Date(currentWeekStart), 
+            end_date: new Date(weekEnd) 
+          })
+          weekCounter++
+        }
+        
+        // Move to next week
+        currentWeekStart.setDate(currentWeekStart.getDate() + 7)
+      }
+      
+      // Reverse to show most recent weeks first
+      periods.reverse()
+    } else if (periodType === 'monthly') {
+      // Start from tracking start date (October 26, 2025)
+      const monthStart = new Date(trackingStart)
+      monthStart.setHours(0, 0, 0, 0)
+      monthStart.setDate(1) // Start from first day of the month
+      
+      // Generate months from tracking start month to now
+      let currentMonthStart = new Date(monthStart)
+      
+      while (currentMonthStart <= now) {
+        const monthEnd = new Date(currentMonthStart.getFullYear(), currentMonthStart.getMonth() + 1, 0)
+        monthEnd.setHours(23, 59, 59, 999)
+        
+        const year = currentMonthStart.getFullYear()
+        const month = String(currentMonthStart.getMonth() + 1).padStart(2, '0')
+        const key = `${year}-${month}`
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        const label = `${monthNames[currentMonthStart.getMonth()]} ${year}`
+        
+        periods.push({ 
+          period_key: key, 
+          period_label: label, 
+          start_date: new Date(currentMonthStart), 
+          end_date: new Date(monthEnd) 
+        })
+        
+        // Move to next month
+        currentMonthStart = new Date(currentMonthStart.getFullYear(), currentMonthStart.getMonth() + 1, 1)
+        currentMonthStart.setHours(0, 0, 0, 0)
+      }
+      
+      // Reverse to show most recent months first
+      periods.reverse()
+    }
+    
+    return periods
+  }, [])
+
+  // Fetch bank deposits
+  const fetchBankDeposits = useCallback(async () => {
+    if (!supabase || !userId) return
+    
+    // Only CEO and Executive Assistant can access this
+    if (userRole !== 'ceo' && userRole !== 'executive_assistant') return
+    
+    setLoadingBankDeposits(true)
+    try {
+      // Generate periods based on selected type
+      const periods = generatePeriodKeys(
+        bankDepositPeriod,
+        customStartDate ? new Date(customStartDate) : undefined,
+        customEndDate ? new Date(customEndDate) : undefined
+      )
+      
+      // Fetch all bank deposits for this period type at once
+      const periodKeys = periods.map(p => p.period_key)
+      const { data: allDeposits, error: depositsError } = await supabase
+        .from('bank_deposits')
+        .select('*')
+        .eq('period_type', bankDepositPeriod)
+        .in('period_key', periodKeys)
+      
+      if (depositsError) {
+        console.error('Error fetching bank deposits:', depositsError)
+      }
+      
+      // Create a map for quick lookup
+      const depositsMap = new Map<string, any>()
+      if (allDeposits) {
+        allDeposits.forEach((deposit: any) => {
+          depositsMap.set(deposit.period_key, deposit)
+        })
+      }
+      
+      // Calculate payments from orders for each period
+      const depositsWithCalculations = await Promise.all(
+        periods.map(async (period) => {
+          const calculated = await calculatePaymentsFromOrders(period.start_date, period.end_date)
+          
+          // Get existing deposit from map
+          const depositData = depositsMap.get(period.period_key)
+          
+          return {
+            period_key: period.period_key,
+            period_label: period.period_label,
+            start_date: period.start_date.toISOString().split('T')[0],
+            end_date: period.end_date.toISOString().split('T')[0],
+            calculated_momo: calculated.momo,
+            calculated_cash: calculated.cash,
+            momo_amount: depositData ? Number(depositData.momo_amount || 0) : calculated.momo,
+            cash_amount: depositData ? Number(depositData.cash_amount || 0) : calculated.cash,
+            bank_deposit_amount: depositData ? Number(depositData.bank_deposit_amount || 0) : 0,
+            notes: depositData?.notes || '',
+            id: depositData?.id
+          } as BankDepositRow
+        })
+      )
+      
+      setBankDeposits(depositsWithCalculations)
+    } catch (err: any) {
+      console.error('fetchBankDeposits error:', err)
+      toast.error('Failed to load bank deposits data.')
+    } finally {
+      setLoadingBankDeposits(false)
+    }
+  }, [supabase, userId, userRole, bankDepositPeriod, customStartDate, customEndDate, generatePeriodKeys, calculatePaymentsFromOrders])
+
+  // Save or update bank deposit
+  const saveBankDeposit = useCallback(async (row: BankDepositRow) => {
+    if (!supabase || !userId || userRole !== 'executive_assistant') {
+      toast.error('Only Executive Assistant can save bank deposits.')
+      return
+    }
+    
+    try {
+      const periodData = {
+        period_type: bankDepositPeriod,
+        period_key: row.period_key,
+        start_date: row.start_date,
+        end_date: row.end_date,
+        momo_amount: row.momo_amount,
+        cash_amount: row.cash_amount,
+        bank_deposit_amount: row.bank_deposit_amount,
+        notes: row.notes || '',
+        updated_by: userId
+      }
+      
+      console.log('Saving bank deposit:', periodData)
+      
+      let error = null
+      if (row.id) {
+        // Update existing
+        const { error: updateError } = await supabase
+          .from('bank_deposits')
+          .update(periodData)
+          .eq('id', row.id)
+        
+        error = updateError
+        if (!error) {
+          toast.success('Bank deposit updated successfully!')
+        }
+      } else {
+        // Insert new
+        const insertData = { ...periodData, created_by: userId }
+        console.log('Inserting deposit:', insertData)
+        
+        const { error: insertError, data: insertedData } = await supabase
+          .from('bank_deposits')
+          .insert([insertData])
+          .select()
+        
+        error = insertError
+        if (!error && insertedData && insertedData.length > 0) {
+          toast.success('Bank deposit saved successfully!')
+          console.log('Inserted deposit successfully:', insertedData[0])
+        } else if (error) {
+          console.error('Insert error:', error)
+        }
+      }
+      
+      if (error) {
+        console.error('Save error details:', error)
+        throw error
+      }
+      
+      setEditingRow(null)
+      // Force refresh immediately - wait a moment for database to sync
+      setTimeout(async () => {
+        await fetchBankDeposits()
+      }, 200)
+    } catch (err: any) {
+      console.error('saveBankDeposit error:', err)
+      toast.error(`Failed to save bank deposit: ${err?.message || 'Unknown error'}`)
+    }
+  }, [supabase, userId, userRole, bankDepositPeriod, fetchBankDeposits])
+  // 💰 BANK DEPOSITS INTEGRATION END
+
   useEffect(() => {
     fetchRevenues()
     fetchStaffPerformance()
     fetchExpenses()
     fetchDebts()
   }, [fetchRevenues, fetchStaffPerformance, fetchExpenses, fetchDebts])
+
+  // Fetch bank deposits when role is available
+  useEffect(() => {
+    if (userRole === 'ceo' || userRole === 'executive_assistant') {
+      fetchBankDeposits()
+    }
+  }, [userRole, fetchBankDeposits])
 
   // ✅ Realtime updates for staff performance - always keep data fresh
   useEffect(() => {
@@ -785,6 +1145,9 @@ export default function ReportsBase() {
               fetchStaffPerformance()
               fetchExpenses()
               fetchDebts()
+              if (userRole === 'ceo' || userRole === 'executive_assistant') {
+                fetchBankDeposits()
+              }
             }} 
             disabled={loading}
             className="whitespace-nowrap text-xs sm:text-sm flex-shrink-0"
@@ -936,6 +1299,235 @@ export default function ReportsBase() {
                 </div>
               </div>
             </div>
+            {/* Mobile hint */}
+            <p className="text-xs text-muted-foreground mt-2 sm:hidden">
+              💡 Scroll horizontally to see all columns
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 💰 BANK DEPOSITS SECTION - CEO ONLY - Mobile Optimized */}
+      {(userRole === 'ceo' || userRole === 'executive_assistant') && (
+        <Card className="bg-background border border-border shadow-sm">
+          <CardContent className="p-3 sm:p-4 md:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 sm:mb-4 gap-3">
+              <h2 className="text-sm sm:text-base md:text-lg font-semibold text-foreground">
+                💰 Payment Methods & Bank Deposits
+              </h2>
+              <div className="flex flex-col sm:flex-row gap-2">
+                {/* Period Type Selector */}
+                <select
+                  value={bankDepositPeriod}
+                  onChange={(e) => {
+                    setBankDepositPeriod(e.target.value as BankDepositPeriod)
+                    if (e.target.value !== 'custom') {
+                      setCustomStartDate('')
+                      setCustomEndDate('')
+                    }
+                  }}
+                  className="w-full sm:w-auto border border-border bg-background text-foreground rounded-md p-2 text-sm font-medium"
+                >
+                  <option value="weekly">📅 Weekly</option>
+                  <option value="monthly">📅 Monthly</option>
+                  <option value="custom">📅 Date Range</option>
+                </select>
+                
+                {/* Custom Date Range */}
+                {bankDepositPeriod === 'custom' && (
+                  <div className="flex gap-2">
+                    <input
+                      type="date"
+                      value={customStartDate}
+                      onChange={(e) => setCustomStartDate(e.target.value)}
+                      className="border border-border bg-background text-foreground rounded-md p-2 text-sm"
+                      placeholder="Start Date"
+                    />
+                    <input
+                      type="date"
+                      value={customEndDate}
+                      onChange={(e) => setCustomEndDate(e.target.value)}
+                      className="border border-border bg-background text-foreground rounded-md p-2 text-sm"
+                      placeholder="End Date"
+                    />
+                  </div>
+                )}
+                
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    if (bankDepositPeriod === 'custom' && (!customStartDate || !customEndDate)) {
+                      toast.error('Please select both start and end dates for custom range.')
+                      return
+                    }
+                    fetchBankDeposits()
+                  }}
+                  disabled={loadingBankDeposits}
+                  className="whitespace-nowrap text-xs sm:text-sm flex-shrink-0"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${loadingBankDeposits ? 'animate-spin' : ''}`} />
+                  <span className="ml-1.5 hidden xs:inline">{loadingBankDeposits ? 'Loading...' : 'Load'}</span>
+                </Button>
+              </div>
+            </div>
+
+            {/* Info Banner */}
+            {userRole === 'ceo' && (
+              <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-4">
+                <p className="text-xs sm:text-sm text-blue-900 dark:text-blue-100">
+                  <strong>CEO View Only:</strong> This section shows calculated MoMo and Cash from orders, along with manually entered bank deposit amounts. Only Executive Assistant can edit these values.
+                </p>
+              </div>
+            )}
+
+            {userRole === 'executive_assistant' && (
+              <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg p-3 mb-4">
+                <p className="text-xs sm:text-sm text-green-900 dark:text-green-100">
+                  <strong>Executive Assistant:</strong> You can edit MoMo, Cash, and Bank Deposit amounts. Values are automatically calculated from orders but can be adjusted manually.
+                </p>
+              </div>
+            )}
+
+            {loadingBankDeposits ? (
+              <div className="flex items-center justify-center h-[200px]">
+                <p className="text-sm text-muted-foreground">Loading bank deposits...</p>
+              </div>
+            ) : bankDeposits.length > 0 ? (
+              <div className="overflow-x-auto -mx-3 sm:-mx-4 md:-mx-6">
+                <div className="inline-block min-w-full align-middle">
+                  <div className="overflow-hidden">
+                    <table className="min-w-full text-xs sm:text-sm border-collapse">
+                      <thead>
+                        <tr className="bg-muted text-foreground">
+                          <th className="p-1.5 sm:p-2 text-left sticky left-0 bg-muted z-10 min-w-[120px]">Period</th>
+                          <th className="p-1.5 sm:p-2 text-left whitespace-nowrap">Calculated MoMo (₵)</th>
+                          <th className="p-1.5 sm:p-2 text-left whitespace-nowrap">Calculated Cash (₵)</th>
+                          <th className="p-1.5 sm:p-2 text-left whitespace-nowrap">MoMo Amount (₵)</th>
+                          <th className="p-1.5 sm:p-2 text-left whitespace-nowrap">Cash Amount (₵)</th>
+                          <th className="p-1.5 sm:p-2 text-left whitespace-nowrap">Bank Deposit (₵)</th>
+                          <th className="p-1.5 sm:p-2 text-left whitespace-nowrap">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {bankDeposits.map((row, i) => (
+                          <tr key={i} className="border-t border-border hover:bg-muted/30">
+                            <td className="p-1.5 sm:p-2 font-medium sticky left-0 bg-background z-10">{row.period_label}</td>
+                            <td className="p-1.5 sm:p-2 text-green-600 font-semibold whitespace-nowrap">
+                              {row.calculated_momo.toFixed(2)}
+                            </td>
+                            <td className="p-1.5 sm:p-2 text-blue-600 font-semibold whitespace-nowrap">
+                              {row.calculated_cash.toFixed(2)}
+                            </td>
+                            {editingRow === row.period_key ? (
+                              <>
+                                <td className="p-1.5 sm:p-2">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={editForm.momo}
+                                    onChange={(e) => setEditForm({ ...editForm, momo: parseFloat(e.target.value) || 0 })}
+                                    className="w-full px-2 py-1 border border-border rounded bg-background text-foreground text-sm"
+                                  />
+                                </td>
+                                <td className="p-1.5 sm:p-2">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={editForm.cash}
+                                    onChange={(e) => setEditForm({ ...editForm, cash: parseFloat(e.target.value) || 0 })}
+                                    className="w-full px-2 py-1 border border-border rounded bg-background text-foreground text-sm"
+                                  />
+                                </td>
+                                <td className="p-1.5 sm:p-2">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={editForm.bank_deposit}
+                                    onChange={(e) => setEditForm({ ...editForm, bank_deposit: parseFloat(e.target.value) || 0 })}
+                                    className="w-full px-2 py-1 border border-border rounded bg-background text-foreground text-sm"
+                                  />
+                                </td>
+                                <td className="p-1.5 sm:p-2">
+                                  <div className="flex gap-1">
+                                    <button
+                                      onClick={() => {
+                                        saveBankDeposit({
+                                          ...row,
+                                          momo_amount: editForm.momo,
+                                          cash_amount: editForm.cash,
+                                          bank_deposit_amount: editForm.bank_deposit,
+                                          notes: editForm.notes || ''
+                                        })
+                                      }}
+                                      className="p-1.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-950/30 rounded"
+                                      title="Save"
+                                    >
+                                      <Save className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setEditingRow(null)
+                                        setEditForm({ momo: 0, cash: 0, bank_deposit: 0, notes: '' })
+                                      }}
+                                      className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded"
+                                      title="Cancel"
+                                    >
+                                      <X className="h-4 w-4" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="p-1.5 sm:p-2 text-green-600 font-semibold whitespace-nowrap">
+                                  {row.momo_amount.toFixed(2)}
+                                </td>
+                                <td className="p-1.5 sm:p-2 text-blue-600 font-semibold whitespace-nowrap">
+                                  {row.cash_amount.toFixed(2)}
+                                </td>
+                                <td className="p-1.5 sm:p-2 text-purple-600 font-semibold whitespace-nowrap">
+                                  {row.bank_deposit_amount.toFixed(2)}
+                                </td>
+                                <td className="p-1.5 sm:p-2">
+                                  {userRole === 'executive_assistant' && (
+                                    <button
+                                      onClick={() => {
+                                        setEditingRow(row.period_key)
+                                        setEditForm({
+                                          momo: row.momo_amount,
+                                          cash: row.cash_amount,
+                                          bank_deposit: row.bank_deposit_amount,
+                                          notes: row.notes || ''
+                                        })
+                                      }}
+                                      className="p-1.5 text-primary hover:bg-muted rounded"
+                                      title="Edit"
+                                    >
+                                      <Edit2 className="h-4 w-4" />
+                                    </button>
+                                  )}
+                                  {userRole === 'ceo' && (
+                                    <span className="text-xs text-muted-foreground">View Only</span>
+                                  )}
+                                </td>
+                              </>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-[200px]">
+                <p className="text-sm text-muted-foreground">
+                  {bankDepositPeriod === 'custom' && (!customStartDate || !customEndDate)
+                    ? 'Please select start and end dates and click Load'
+                    : 'No bank deposits data available. Click Load to fetch data.'}
+                </p>
+              </div>
+            )}
             {/* Mobile hint */}
             <p className="text-xs text-muted-foreground mt-2 sm:hidden">
               💡 Scroll horizontally to see all columns

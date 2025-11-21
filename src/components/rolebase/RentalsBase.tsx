@@ -120,7 +120,11 @@ interface RentalsBaseProps {
 export default function RentalsBase({ role }: RentalsBaseProps) {
   const { items, loading, error, refresh, upsertItem, session } = useRentalInventory()
 
-  const isCEO = useMemo(() => role?.toLowerCase() === 'ceo', [role])
+  // Full access roles: CEO, Executive Assistant, and Intern
+  const canEdit = useMemo(() => {
+    const roleLower = role?.toLowerCase()
+    return roleLower === 'ceo' || roleLower === 'executive_assistant' || roleLower === 'intern'
+  }, [role])
 
   const [addOpen, setAddOpen] = useState(false)
   const [addDefaults, setAddDefaults] = useState<{ category?: CategoryKey; itemName?: string } | null>(null)
@@ -160,7 +164,7 @@ export default function RentalsBase({ role }: RentalsBaseProps) {
   )
 
   const handleOpenAdd = () => {
-    if (!isCEO) return
+    if (!canEdit) return
     setAddDefaults(null)
     setAddOpen(true)
   }
@@ -171,7 +175,7 @@ export default function RentalsBase({ role }: RentalsBaseProps) {
   }
 
   const handleOpenEdit = (item: RentalInventoryRow) => {
-    if (!isCEO) return
+    if (!canEdit) return
     setSelectedItem(item)
     setEditOpen(true)
   }
@@ -196,14 +200,14 @@ export default function RentalsBase({ role }: RentalsBaseProps) {
         <div>
           <h1 className="text-3xl font-bold text-foreground">Rental Inventory</h1>
           <p className="text-sm text-muted-foreground">
-            Track rental items by status. CEO can edit; other roles are read‑only.
+            Track rental items by status. CEO, Executive Assistant, and Intern can edit; other roles are read‑only.
             {role && (
               <span className="ml-2 text-xs text-gray-400">(Role: {role})</span>
             )}
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {isCEO && (
+          {canEdit && (
             <Button onClick={handleOpenAdd} className="shadow-sm">
               + Add New Item
             </Button>
@@ -250,7 +254,7 @@ export default function RentalsBase({ role }: RentalsBaseProps) {
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-semibold text-sm">{name}</span>
-                        {isCEO ? (
+                        {canEdit ? (
                           record ? (
                             <Button
                               size="sm"
@@ -344,7 +348,7 @@ export default function RentalsBase({ role }: RentalsBaseProps) {
                             {record?.inactive ?? 0}
                           </TableCell>
                           <TableCell className="text-right">
-                            {isCEO ? (
+                            {canEdit ? (
                               record ? (
                                 <Button
                                   size="sm"

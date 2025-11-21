@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { TRACKING_START_DATE } from '@/lib/constants'
 import toast from 'react-hot-toast'
 
 interface Order {
@@ -27,6 +28,7 @@ export function useRealtimeOrders() {
       const { data, error } = await supabase
         .from('orders')
         .select('*')
+        .gte('created_at', TRACKING_START_DATE.toISOString())
         .order('created_at', { ascending: false })
 
       if (error) {

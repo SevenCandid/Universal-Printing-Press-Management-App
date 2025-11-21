@@ -58,3 +58,4 @@ COMMENT ON COLUMN manual_clients.phone IS 'Client phone number';
 
 
 
+
