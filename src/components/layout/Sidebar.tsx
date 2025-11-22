@@ -51,15 +51,15 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     const baseNav = [
       { name: 'Dashboard', href: `/${r}/dashboard`, icon: LayoutDashboard },
       { name: 'Orders', href: `/${r}/orders`, icon: ClipboardList },
-      { name: 'Client Connect', href: `/${r}/clientconnect`, icon: Mail },
-      { name: 'Customers', href: `/${r}/customers`, icon: UserCircle },
-      { name: 'Files', href: `/${r}/files`, icon: FolderOpen },
       { name: 'Enquiries', href: `/${r}/enquiries`, icon: MessageSquare },
       { name: 'Tasks', href: `/${r}/tasks`, icon: Briefcase },
-      { name: 'Users', href: `/${r}/staff`, icon: Users },
-      { name: 'Attendance', href: `/${r}/attendance`, icon: Clock },
-      { name: 'Expenses', href: `/${r}/expenses`, icon: Receipt },
       { name: 'Reports', href: `/${r}/reports`, icon: BarChart3 },
+      { name: 'Expenses', href: `/${r}/expenses`, icon: Receipt },
+      { name: 'Customers', href: `/${r}/customers`, icon: UserCircle },
+      { name: 'Client Connect', href: `/${r}/clientconnect`, icon: Mail },
+      { name: 'Files', href: `/${r}/files`, icon: FolderOpen },
+      { name: 'Attendance', href: `/${r}/attendance`, icon: Clock },
+      { name: 'Users', href: `/${r}/staff`, icon: Users },
       { name: 'Forum', href: `/${r}/forum`, icon: MessagesSquare },
       { name: 'App Handbook', href: `/${r}/handbook`, icon: BookOpen },
       { name: 'UPP Handbook', href: `/${r}/company-handbook`, icon: FileText },
@@ -67,10 +67,12 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
     // Add role-specific pages
     if (r === 'sales_representative') {
-      baseNav.splice(7, 0, { name: 'Daily Reports', href: `/${r}/daily-reports`, icon: ReportIcon })
+      // Insert Daily Reports after Tasks (position 4)
+      baseNav.splice(4, 0, { name: 'Daily Reports', href: `/${r}/daily-reports`, icon: ReportIcon })
     }
     if (r === 'ceo' || r === 'manager' || r === 'executive_assistant' || r === 'intern') {
-      baseNav.splice(8, 0, { name: 'Sales Reports', href: `/${r}/sales-reports`, icon: ReportIcon })
+      // Insert Sales Reports after Tasks (position 4)
+      baseNav.splice(4, 0, { name: 'Sales Reports', href: `/${r}/sales-reports`, icon: ReportIcon })
     }
 
     return baseNav

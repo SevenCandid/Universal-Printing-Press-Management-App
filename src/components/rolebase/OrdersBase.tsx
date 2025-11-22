@@ -1,7 +1,6 @@
 'use client'
 
 import { FilterToolbar } from '@/components/ui/FilterToolbar'
-import { TRACKING_START_DATE } from '@/lib/constants'
 
 import { useEffect, useState, useRef, Fragment } from 'react'
 import {
@@ -182,11 +181,10 @@ export default function OrdersPage() {
     const to = from + PAGE_SIZE - 1
 
     // Use the orders_with_creator view to get creator info
-    // Exclude October orders - only show orders from November 1st, 2024 onwards
+    // Show all orders from the start
     let query: any = supabase
       .from('orders_with_creator')
       .select('*', { count: 'exact' })
-      .gte('created_at', TRACKING_START_DATE.toISOString())
 
     if (search.trim()) {
       const escaped = search.replace(/'/g, "''")
@@ -242,23 +240,25 @@ export default function OrdersPage() {
       }
     }
 
-    // Apply period date filters
-    if (periodStartDate && periodEndDate) {
-      query = query.gte('created_at', periodStartDate.toISOString()).lte('created_at', periodEndDate.toISOString())
-    } else if (periodStartDate) {
-      query = query.gte('created_at', periodStartDate.toISOString())
-    }
-
-    // Date range override (if provided)
-    if (dateFrom) {
-      const fromDate = new Date(dateFrom)
-      fromDate.setHours(0, 0, 0, 0)
-      query = query.gte('created_at', fromDate.toISOString())
-    }
-    if (dateTo) {
-      const toDate = new Date(dateTo)
-      toDate.setHours(23, 59, 59, 999)
-      query = query.lte('created_at', toDate.toISOString())
+    // Date range override (if provided) - takes precedence over period filter
+    if (dateFrom || dateTo) {
+      if (dateFrom) {
+        // Parse date string (YYYY-MM-DD) and set to start of day in local timezone
+        const fromDate = new Date(dateFrom + 'T00:00:00')
+        query = query.gte('created_at', fromDate.toISOString())
+      }
+      if (dateTo) {
+        // Parse date string (YYYY-MM-DD) and set to end of day in local timezone
+        const toDate = new Date(dateTo + 'T23:59:59.999')
+        query = query.lte('created_at', toDate.toISOString())
+      }
+    } else {
+      // Apply period date filters only if no custom date range is provided
+      if (periodStartDate && periodEndDate) {
+        query = query.gte('created_at', periodStartDate.toISOString()).lte('created_at', periodEndDate.toISOString())
+      } else if (periodStartDate) {
+        query = query.gte('created_at', periodStartDate.toISOString())
+      }
     }
 
     // Role-based visibility: as requested, staff/board see read-only/all; CEO/manager see everything
@@ -307,7 +307,6 @@ export default function OrdersPage() {
       let summaryQuery: any = supabase
         .from('orders_with_creator')
         .select('total_amount, payment_status', { count: 'exact' })
-        .gte('created_at', TRACKING_START_DATE.toISOString())
 
       // Apply same filters as main query
       if (search.trim()) {
@@ -356,22 +355,25 @@ export default function OrdersPage() {
         }
       }
 
-      if (periodStartDate && periodEndDate) {
-        summaryQuery = summaryQuery.gte('created_at', periodStartDate.toISOString()).lte('created_at', periodEndDate.toISOString())
-      } else if (periodStartDate) {
-        summaryQuery = summaryQuery.gte('created_at', periodStartDate.toISOString())
-      }
-
-      // Date range override
-      if (dateFrom) {
-        const fromDate = new Date(dateFrom)
-        fromDate.setHours(0, 0, 0, 0)
-        summaryQuery = summaryQuery.gte('created_at', fromDate.toISOString())
-      }
-      if (dateTo) {
-        const toDate = new Date(dateTo)
-        toDate.setHours(23, 59, 59, 999)
-        summaryQuery = summaryQuery.lte('created_at', toDate.toISOString())
+      // Date range override (if provided) - takes precedence over period filter
+      if (dateFrom || dateTo) {
+        if (dateFrom) {
+          // Parse date string (YYYY-MM-DD) and set to start of day in local timezone
+          const fromDate = new Date(dateFrom + 'T00:00:00')
+          summaryQuery = summaryQuery.gte('created_at', fromDate.toISOString())
+        }
+        if (dateTo) {
+          // Parse date string (YYYY-MM-DD) and set to end of day in local timezone
+          const toDate = new Date(dateTo + 'T23:59:59.999')
+          summaryQuery = summaryQuery.lte('created_at', toDate.toISOString())
+        }
+      } else {
+        // Apply period date filters only if no custom date range is provided
+        if (periodStartDate && periodEndDate) {
+          summaryQuery = summaryQuery.gte('created_at', periodStartDate.toISOString()).lte('created_at', periodEndDate.toISOString())
+        } else if (periodStartDate) {
+          summaryQuery = summaryQuery.gte('created_at', periodStartDate.toISOString())
+        }
       }
 
       // Fetch all filtered orders for summary calculation (no pagination)

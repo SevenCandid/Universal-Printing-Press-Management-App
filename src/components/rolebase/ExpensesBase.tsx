@@ -140,9 +140,18 @@ export default function ExpensesBase({ role }: { role: string }) {
     
     setLoading(true)
     try {
+      const amount = parseFloat(formData.amount)
+      
+      // Validate amount is a valid number
+      if (isNaN(amount) || amount < 0) {
+        toast.error('Please enter a valid amount')
+        setLoading(false)
+        return
+      }
+
       const expenseData = {
         title: formData.title,
-        amount: parseFloat(formData.amount),
+        amount: amount,
         category: formData.category,
         description: formData.description || null,
         added_by: session.user.id
@@ -150,11 +159,51 @@ export default function ExpensesBase({ role }: { role: string }) {
 
       if (navigator.onLine) {
         // Online - save directly
-        const { error } = await supabase
+        const { data: insertedData, error } = await supabase
           .from('expenses')
           .insert(expenseData)
+          .select()
+          .single()
         
-        if (error) throw error
+        if (error) {
+          console.error('Database error:', error)
+          throw new Error(error.message || 'Failed to create expense')
+        }
+        
+        // Get user profile for notifications
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('name, email')
+          .eq('id', session.user.id)
+          .single()
+        
+        // Send alerts if expense >= GHC 1000.00
+        if (amount >= 1000 && insertedData) {
+          try {
+            // Send email alert
+            const { sendLargeExpenseAlert } = await import('@/lib/sendEmail')
+            await sendLargeExpenseAlert({
+              title: expenseData.title,
+              amount: amount,
+              category: expenseData.category,
+              description: expenseData.description || undefined,
+              added_by_name: profile?.name || 'Unknown',
+              created_at: insertedData.created_at
+            })
+            
+            // Send push notification
+            const { sendLargeExpensePush } = await import('@/lib/pushNotify')
+            await sendLargeExpensePush({
+              title: expenseData.title,
+              amount: amount,
+              category: expenseData.category,
+              added_by_name: profile?.name || 'Unknown'
+            })
+          } catch (notifError) {
+            // Don't fail expense creation if notifications fail
+            console.error('Notification error (non-critical):', notifError)
+          }
+        }
         
         toast.success('✅ Expense created successfully!')
         setShowAddModal(false)
@@ -178,7 +227,8 @@ export default function ExpensesBase({ role }: { role: string }) {
       }
     } catch (err: any) {
       console.error('Create expense error:', err)
-      toast.error(err.message || 'Failed to create expense')
+      const errorMessage = err?.message || err?.error?.message || 'Failed to create expense'
+      toast.error(errorMessage)
     } finally {
       setLoading(false)
     }
